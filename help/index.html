@@ -1,0 +1,2388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llama-shell 帮助中心 — llama.cpp 模型管理器</title>
+<meta name="description" content="llama-shell（llama.cpp 模型管理器）使用说明与 llama.cpp 参数大全，面向新手。">
+<style>
+:root{
+  --bg:#111318; --panel:#1a1d23; --card:#24272b; --card2:#2b2f34;
+  --border:#343638; --text:#dce4ee; --muted:#9aa4b2;
+  --accent:#1f6aa5; --accent2:#4da3ff; --green:#4caf50; --teal:#009e8e;
+  --warn:#e0a13a; --code-bg:#1c1f25;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:"Microsoft YaHei UI","Segoe UI",system-ui,sans-serif;
+  line-height:1.75; font-size:15.5px;
+}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+code,.flag{
+  font-family:Consolas,"Cascadia Mono",monospace;
+  background:var(--code-bg); border:1px solid var(--border);
+  border-radius:5px; padding:1px 6px; font-size:.88em; color:#a8d0ff;
+}
+code.plain{color:var(--text)}
+/* ───── hero ───── */
+.hero{
+  max-width:1080px;margin:0 auto;padding:56px 24px 8px;
+}
+.hero .kicker{
+  display:inline-block;font-size:13px;letter-spacing:.12em;color:var(--teal);
+  border:1px solid var(--teal);border-radius:999px;padding:2px 14px;margin-bottom:18px;
+}
+.hero h1{font-size:34px;line-height:1.3;margin-bottom:12px}
+.hero h1 .dim{color:var(--muted);font-weight:400}
+.hero p.lead{color:var(--muted);max-width:640px;margin-bottom:8px}
+/* ───── layout ───── */
+.layout{
+  max-width:1080px;margin:0 auto;padding:0 24px 80px;
+  display:grid;grid-template-columns:345px 1fr;gap:36px;align-items:start;
+}
+aside.toc{
+  position:sticky;top:18px;max-height:calc(100vh - 36px);overflow-y:auto;
+  scrollbar-width:none;-ms-overflow-style:none;   /* 隐藏滚动条(滚轮/触摸仍可滚动) */
+  background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:16px 14px;font-size:13.5px;
+}
+aside.toc::-webkit-scrollbar{width:0;height:0;display:none}
+aside.toc .toc-title{font-weight:700;color:var(--muted);letter-spacing:.08em;font-size:12px;margin:10px 0 10px}
+aside.toc .toc-title:first-child{margin-top:0}
+/* 页内搜索 */
+.search-wrap{position:relative;margin-bottom:12px}
+.toc-search{
+  width:100%;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);padding:6px 10px;font-size:13px;outline:none;
+  font-family:inherit;
+}
+.toc-search:focus{border-color:var(--accent)}
+.toc-search::placeholder{color:var(--muted)}
+.search-results{
+  display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;
+  max-height:340px;overflow-y:auto;background:var(--card);border:1px solid var(--border);
+  border-radius:8px;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.55);
+}
+.sr-item{padding:7px 10px;cursor:pointer;font-size:12.5px;border-bottom:1px solid rgba(255,255,255,.04)}
+.sr-item:last-child{border-bottom:none}
+.sr-item:hover,.sr-item.sel{background:var(--card2)}
+.sr-item .sr-type{
+  display:inline-block;color:#0e1216;background:var(--teal);border-radius:4px;
+  font-size:10.5px;padding:0 5px;margin-right:6px;vertical-align:1px;
+}
+.sr-item.is-param .sr-type{background:#d8b4fe}
+.sr-item .sr-text{color:var(--text)}
+.sr-item .sr-ctx{
+  display:block;color:var(--muted);font-size:11.5px;margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.sr-empty{padding:9px 10px;color:var(--muted);font-size:12.5px}
+@keyframes flash-hl{0%{box-shadow:0 0 0 4px rgba(77,163,255,.85)}100%{box-shadow:0 0 0 0 rgba(77,163,255,0)}}
+.flash{animation:flash-hl 1.8s ease-out}
+aside.toc a{display:block;color:var(--muted);padding:4px 8px;border-radius:6px;border-left:2px solid transparent}
+aside.toc a:not(.lvl2):not(.lvl3){font-weight:600;color:var(--text);margin-top:8px}  /* 章 */
+aside.toc a.lvl2{padding-left:32px}
+aside.toc a.lvl3{padding-left:56px;font-size:12.5px}
+/* 目录折叠 */
+.toc-caret{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:24px;height:24px;margin:0 3px 0 -6px;border-radius:7px;
+  color:var(--muted);font-size:15px;line-height:1;cursor:pointer;user-select:none;
+  transition:background .12s,color .12s;
+}
+.toc-caret:hover{color:var(--accent2);background:var(--card2)}
+.toc a.toc-folded{color:var(--text);opacity:.75}
+.toc .toc-kids{overflow:hidden}
+aside.toc a:hover{color:var(--text);text-decoration:none;background:var(--card)}
+aside.toc a.active{color:var(--accent2);border-left-color:var(--accent);background:var(--card)}
+main section.chapter{margin-bottom:56px;scroll-margin-top:16px}
+main section.sub{margin-top:34px;scroll-margin-top:16px}
+h2.chap{
+  font-size:24px;padding:10px 16px;border-radius:10px;
+  background:linear-gradient(90deg,rgba(31,106,165,.22),rgba(31,106,165,0));
+  border-left:4px solid var(--accent);margin-bottom:22px;
+}
+h2.chap .en{color:var(--muted);font-size:13px;font-weight:400;margin-left:10px}
+h3{font-size:18.5px;margin:0 0 12px;color:var(--text)}
+h3 .no{color:var(--accent2);margin-right:8px;font-family:Consolas,monospace}
+h4{font-size:15.5px;margin:18px 0 8px;color:#cfe0f2}
+p{margin-bottom:12px}
+ul,ol{margin:0 0 14px 22px}
+li{margin-bottom:6px}
+.card{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:18px 20px;margin-bottom:16px;
+}
+.tip{
+  background:rgba(76,175,80,.08);border:1px solid rgba(76,175,80,.35);
+  border-radius:10px;padding:12px 16px;margin:14px 0;font-size:14px;
+}
+.warn{
+  background:rgba(224,161,58,.08);border:1px solid rgba(224,161,58,.4);
+  border-radius:10px;padding:12px 16px;margin:14px 0;font-size:14px;
+}
+table{width:100%;border-collapse:collapse;margin:12px 0 18px;font-size:14px}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:var(--card2);color:#cfe0f2;white-space:nowrap}
+tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+td code{white-space:nowrap}
+/* 概念卡 */
+.concept{border-left:3px solid var(--teal)}
+.concept h4{margin-top:0}
+/* 参数精讲卡 */
+.tune{margin-top:10px;display:grid;gap:6px;font-size:14px}
+.tune .up,.tune .down{padding-left:14px;position:relative}
+.tune .up::before{content:"▲ 调大";position:absolute;left:0;color:var(--warn);font-size:12px;top:2px}
+.tune .down::before{content:"▼ 调小";position:absolute;left:0;color:var(--accent2);font-size:12px;top:2px}
+.tune .up{padding-left:64px}
+.tune .down{padding-left:64px}
+/* 参数参考 */
+.group-nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+.group-nav a{
+  background:var(--card);border:1px solid var(--border);border-radius:999px;
+  padding:3px 14px;font-size:13px;color:var(--muted);
+}
+.group-nav a:hover{color:var(--text);border-color:var(--accent);text-decoration:none}
+.param-group{margin-bottom:28px;scroll-margin-top:16px}
+.param-group>h3{
+  font-size:17px;padding:8px 14px;background:var(--card2);
+  border-radius:8px;border-left:3px solid var(--teal);margin-bottom:12px;
+}
+.pcard{
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:12px 16px;margin-bottom:10px;
+}
+.pcard .pflag{font-weight:700;font-size:14.5px}
+.pcard .pflag .flag{background:transparent;border:none;padding:0;color:#a8d0ff}
+.pcard .pflag .fsep{color:var(--muted);font-weight:400;margin:0 2px}
+.pcard .palias{color:var(--muted);font-size:12.5px;margin-left:8px;font-family:Consolas,monospace}
+.pcard .plabel{color:var(--teal);font-size:14px;margin-left:10px}
+.pcard .pmeta{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.badge{
+  font-size:11.5px;border-radius:5px;padding:1px 8px;
+  border:1px solid var(--border);background:var(--code-bg);color:var(--muted);
+}
+.badge.type{color:#d8b4fe;border-color:#5b3d78}
+.badge.default{color:#ffe1a6;border-color:#6b5426}
+.badge.choice{color:#9fe6b8;border-color:#2f5d3a}
+.pcard .pdesc{margin-top:8px;font-size:14px;color:#c9d4e2}
+.pcard .pplain{margin-top:8px;font-size:13.5px;color:#bff0d0;background:rgba(76,175,80,.07);border-left:3px solid var(--green);padding:7px 11px;border-radius:6px;line-height:1.65}.pcard .pplain b{color:var(--green);font-size:12px;font-weight:700;letter-spacing:.05em;margin-right:6px}
+.gen-note{color:var(--muted);font-size:13px;font-style:italic;margin-bottom:16px}
+/* FAQ */
+.faq details{
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:12px 16px;margin-bottom:10px;
+}
+.faq summary{cursor:pointer;font-weight:600}
+.faq details[open] summary{color:var(--accent2);margin-bottom:8px}
+/* 移动端目录 */
+details.toc-mobile{display:none}
+footer{
+  max-width:1080px;margin:0 auto;padding:0 24px 48px;color:var(--muted);font-size:13px;
+  border-top:1px solid var(--border);padding-top:22px;
+}
+@media (max-width:900px){
+  .layout{grid-template-columns:1fr;gap:0}
+  aside.toc{display:none}
+  details.toc-mobile{
+    display:block;background:var(--panel);border:1px solid var(--border);
+    border-radius:12px;padding:12px 16px;margin-bottom:24px;
+  }
+  details.toc-mobile summary{cursor:pointer;font-weight:700;color:var(--accent2)}
+  details.toc-mobile a{display:block;color:var(--muted);padding:4px 0 4px 14px}
+  details.toc-mobile a.lvl2{padding-left:30px}
+  details.toc-mobile a.lvl3{padding-left:48px;font-size:12.5px}
+  .hero h1{font-size:26px}
+  body{font-size:14.5px}
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <span class="kicker">llama-shell 帮助中心</span>
+  <h1>llama.cpp 模型管理器<br><span class="dim">从零开始，玩转本地大模型</span></h1>
+  <p class="lead">这里是 llama-shell 的官方帮助文档：第一章教你用好软件本身，第二章带你从零理解 llama.cpp 与大模型的每个参数，第三章针对常见需求给出可直接照抄的参数方案——不需要任何基础。</p>
+</header>
+
+<div class="layout">
+
+<aside class="toc">
+  <div class="search-wrap">
+    <input class="toc-search" id="toc-search" type="search"
+           placeholder="🔍 搜索参数 / 章节…" autocomplete="off">
+    <div class="search-results" id="toc-results"></div>
+  </div>
+  <div class="toc-title">目录</div>
+  <a href="#s1" data-toc>第一章 · llama-shell 使用说明</a>
+  <a href="#s1-1" data-toc class="lvl2">1.1 界面布局与按钮</a>
+  <a href="#s1-2" data-toc class="lvl2">1.2 模型管理与上下文</a>
+  <a href="#s1-3" data-toc class="lvl2">1.3 参数面板</a>
+  <a href="#s1-4" data-toc class="lvl2">1.4 启动与更新</a>
+  <a href="#s1-5" data-toc class="lvl2">1.5 config.json 说明</a>
+  <a href="#s1-6" data-toc class="lvl2">1.6 常见问题</a>
+  <a href="#s2" data-toc>第二章 · llama.cpp 通用知识</a>
+  <a href="#s2-0" data-toc class="lvl2">2.0 入门概念</a>
+  <a href="#s2-1" data-toc class="lvl2">2.1 常用参数精讲</a>
+  <a href="#s2-2" data-toc class="lvl2">2.2 全参数参考</a>
+  <a href="#pgrp-server" data-toc class="lvl3">服务器（Server）</a>
+  <a href="#pgrp-model" data-toc class="lvl3">模型（Model）</a>
+  <a href="#pgrp-performance" data-toc class="lvl3">性能（Performance）</a>
+  <a href="#pgrp-sampling" data-toc class="lvl3">采样（Sampling）</a>
+  <a href="#pgrp-reasoning" data-toc class="lvl3">推理（Reasoning）</a>
+  <a href="#pgrp-speculative" data-toc class="lvl3">投机（Speculative）</a>
+  <a href="#pgrp-multimodal" data-toc class="lvl3">多模态（Multimodal）</a>
+  <a href="#pgrp-logging" data-toc class="lvl3">日志（Logging）</a>
+  <a href="#pgrp-advanced" data-toc class="lvl3">高级（Advanced）</a>
+  <a href="#s3" data-toc>第三章 · 常见需求的解决办法</a>
+  <a href="#s3-1" data-toc class="lvl2">3.1 加大上下文并省显存</a>
+  <a href="#s3-2" data-toc class="lvl2">3.2 运行更大的模型</a>
+  <a href="#s3-3" data-toc class="lvl2">3.3 提升速度</a>
+  <a href="#s3-4" data-toc class="lvl2">3.4 多人同时使用</a>
+  <a href="#s3-5" data-toc class="lvl2">3.5 接入第三方软件</a>
+  <a href="#s3-6" data-toc class="lvl2">3.6 输出乱码/模板异常</a>
+  <a href="#s3-7" data-toc class="lvl2">3.7 OOM 排查速查</a>
+</aside>
+
+<main>
+
+<details class="toc-mobile">
+  <summary>📑 展开目录</summary>
+  <div class="search-wrap">
+    <input class="toc-search" id="toc-search-m" type="search"
+           placeholder="🔍 搜索参数 / 章节…" autocomplete="off">
+    <div class="search-results" id="toc-results-m"></div>
+  </div>
+  <a href="#s1">第一章 · llama-shell 使用说明</a>
+  <a href="#s1-1" class="lvl2">1.1 界面布局与按钮</a>
+  <a href="#s1-2" class="lvl2">1.2 模型管理与上下文</a>
+  <a href="#s1-3" class="lvl2">1.3 参数面板</a>
+  <a href="#s1-4" class="lvl2">1.4 启动与更新</a>
+  <a href="#s1-5" class="lvl2">1.5 config.json 说明</a>
+  <a href="#s1-6" class="lvl2">1.6 常见问题</a>
+  <a href="#s2">第二章 · llama.cpp 通用知识</a>
+  <a href="#s2-0" class="lvl2">2.0 入门概念</a>
+  <a href="#s2-1" class="lvl2">2.1 常用参数精讲</a>
+  <a href="#s2-2" class="lvl2">2.2 全参数参考</a>
+  <a href="#pgrp-server" class="lvl3">服务器（Server）</a>
+  <a href="#pgrp-model" class="lvl3">模型（Model）</a>
+  <a href="#pgrp-performance" class="lvl3">性能（Performance）</a>
+  <a href="#pgrp-sampling" class="lvl3">采样（Sampling）</a>
+  <a href="#pgrp-reasoning" class="lvl3">推理（Reasoning）</a>
+  <a href="#pgrp-speculative" class="lvl3">投机（Speculative）</a>
+  <a href="#pgrp-multimodal" class="lvl3">多模态（Multimodal）</a>
+  <a href="#pgrp-logging" class="lvl3">日志（Logging）</a>
+  <a href="#pgrp-advanced" class="lvl3">高级（Advanced）</a>
+  <a href="#s3">第三章 · 常见需求的解决办法</a>
+  <a href="#s3-1" class="lvl2">3.1 加大上下文并省显存</a>
+  <a href="#s3-2" class="lvl2">3.2 运行更大的模型</a>
+  <a href="#s3-3" class="lvl2">3.3 提升速度</a>
+  <a href="#s3-4" class="lvl2">3.4 多人同时使用</a>
+  <a href="#s3-5" class="lvl2">3.5 接入第三方软件</a>
+  <a href="#s3-6" class="lvl2">3.6 输出乱码/模板异常</a>
+  <a href="#s3-7" class="lvl2">3.7 OOM 排查速查</a>
+</details>
+
+<!-- ═══════════════ 第一章 ═══════════════ -->
+<section class="chapter" id="s1">
+  <h2 class="chap">第一章 · llama-shell 使用说明<span class="en">Llama-Shell Guide</span></h2>
+
+  <section class="sub" id="s1-1">
+    <h3><span class="no">1.1</span>界面布局与按钮功能</h3>
+    <p>程序主窗口分为三块：<strong>顶部按钮栏</strong>、<strong>左侧模型栏</strong>（模型列表 + 上下文预设）和<strong>右侧主区</strong>（参数面板、GPU/内存监控条、状态栏、命令预览）。顶部共 9 个按钮：</p>
+    <table>
+      <tr><th>按钮</th><th>作用</th></tr>
+      <tr><td><b style="color:#66bb6a">加载模型</b></td><td>用当前参数启动 <code>llama-server</code> 并加载左侧选中的模型，即"启动"。加载成功后状态栏会显示运行状态，可通过状态栏的「网页运行」打开内置 WebUI。</td></tr>
+      <tr><td><b style="color:#ef5350">卸载模型</b></td><td>停止 <code>llama-server</code> 进程，释放显存与内存，即"停止"。</td></tr>
+      <tr><td><b>重启模型</b></td><td>先卸载再加载。改完参数后点它即可让新参数生效。</td></tr>
+      <tr><td><b>保存参数</b></td><td>把当前模型的所有参数保存到 <code>models_config.json</code>，下次打开自动恢复。</td></tr>
+      <tr><td><b>重置参数</b></td><td>把当前模型恢复到第一次被发现时的默认参数。</td></tr>
+      <tr><td><b>打开日志</b></td><td>打开 <code>logs</code> 目录里的运行日志，报错时先看这里。</td></tr>
+      <tr><td><b style="color:#ba68c8">官网</b></td><td>打开 llama.cpp 的 GitHub 项目主页。</td></tr>
+      <tr><td><b style="color:#4fc3f7">更新</b></td><td>检查并安装 llama.cpp 新版本，详见 <a href="#s1-4">1.4</a>。</td></tr>
+      <tr><td><b style="color:#26a69a">帮助</b></td><td>打开本帮助页面。地址由 <code>config.json</code> 的 <code>help_url</code> 决定，详见 <a href="#s1-5">1.5</a>。</td></tr>
+    </table>
+    <div class="tip">💡 右侧底部的<strong>命令预览</strong>实时显示将执行的完整命令行，点「复制」可以直接拿到别处使用；启动前看一眼，就知道程序到底要做什么。</div>
+  </section>
+
+  <section class="sub" id="s1-2">
+    <h3><span class="no">1.2</span>模型管理与上下文预设</h3>
+    <p><strong>模型列表</strong>自动扫描模型目录（默认是程序所在目录的上一级，也就是存放 <code>.gguf</code> 文件的目录）里的全部 <code>.gguf</code> 模型，点击即可切换。把新模型下载到该目录后，点列表下方的刷新按钮就能看到。</p>
+    <p><strong>上下文预设</strong>提供 4k / 8k / 16k / 32k / 64k 五档，一键设置上下文长度（<code>--ctx-size</code>）。上下文越大越占显存，选模型能"装得下"的最大档位即可；不清楚什么是上下文，先看 <a href="#s2-0">2.0 入门概念</a>。</p>
+    <div class="warn">⚠️ 每个模型的参数互相独立，切换模型后会自动载入该模型上次保存的参数。</div>
+  </section>
+
+  <section class="sub" id="s1-3">
+    <h3><span class="no">1.3</span>参数面板与悬停说明</h3>
+    <p>参数面板按 <code>llama-server --help</code> 的原始分组分成多个标签页：<strong>服务器、模型、性能、采样、推理、投机、多模态、日志、高级</strong>，另有版本更新后自动补齐的「自动补齐」页。</p>
+    <ul>
+      <li>参数名<strong>按 help 原样显示 flag</strong>（如 <code>--n-gpu-layers</code>），不做翻译，保证和官方文档、命令行教程一一对应。</li>
+      <li>把鼠标<strong>悬停在参数行上</strong>，会弹出中文提示：参数含义、类型、默认值和可选值。</li>
+      <li>右侧命令预览实时反映你的每一处改动，所见即所得。</li>
+    </ul>
+    <div class="tip">💡 想系统了解某个参数"设大设小有什么影响"，直接去 <a href="#s2-2">2.2 全参数参考</a> 查询，本页收录了当前版本全部参数。</div>
+  </section>
+
+  <section class="sub" id="s1-4">
+    <h3><span class="no">1.4</span>启动与更新流程</h3>
+    <h4>启动程序</h4>
+    <p>双击 <code>启动.vbs</code> 即可（内部以 <code>pythonw main.py</code> 运行，不弹黑窗）。程序启动时会自动读取 <code>config.json</code> 与 <code>models_config.json</code>，并与当前 <code>llama-server --help</code> 对账参数表。</p>
+    <h4>更新 llama.cpp</h4>
+    <ol>
+      <li>点顶部「<b style="color:#4fc3f7">更新</b>」按钮，程序通过 winget 查询最新版本；</li>
+      <li>发现新版本后弹出确认框，由你决定是否升级；</li>
+      <li>确认后后台执行 <code>winget upgrade</code>（新版本体积约 200MB，请耐心等待）；</li>
+      <li>升级成功后程序弹窗提示并<strong>自动重启</strong>；</li>
+      <li>重启后自动按新版 <code>--help</code> 对账参数表——新增参数会出现在「自动补齐」分组里，无需手动同步。</li>
+    </ol>
+    <div class="warn">⚠️ 如果你在命令行里手动执行 <code>winget upgrade</code>，参数表不会立刻同步——重启一次本程序即可自动完成对账。</div>
+  </section>
+
+  <section class="sub" id="s1-5">
+    <h3><span class="no">1.5</span>config.json 字段说明</h3>
+    <p><code>config.json</code> 位于程序目录下，可用任意文本编辑器修改，保存后重启程序生效：</p>
+    <table>
+      <tr><th>字段</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+      <tr><td><code>llama_server_cmd</code></td><td>字符串</td><td><code>"llama-server"</code></td><td>llama-server 的命令或完整路径。装了多个版本时填完整路径即可切换。</td></tr>
+      <tr><td><code>models_dir</code></td><td>字符串</td><td><code>".."</code></td><td>模型目录，相对路径基于程序所在目录解析。</td></tr>
+      <tr><td><code>monitor_interval_ms</code></td><td>整数</td><td><code>1000</code></td><td>GPU/内存监控刷新间隔（毫秒）。</td></tr>
+      <tr><td><code>context_presets</code></td><td>列表</td><td>4k~64k 五档</td><td>左侧栏上下文预设按钮的档位。</td></tr>
+      <tr><td><code>help_url</code></td><td>字符串</td><td><code>"help/index.html"</code></td><td>「帮助」按钮打开的地址。可以是相对路径（基于程序目录）、绝对路径或 <code>http(s)://</code> 网址。部署到 EdgeOne Pages 后，把它改成你的线上网址即可。</td></tr>
+    </table>
+    <div class="tip">💡 缺失的字段会在启动时自动补默认值，所以老版本的 config.json 不用手工迁移；<code>help_url</code> 在内存中生效即可，若打开 config.json 看不到这个键，手动加一行也一样有效。</div>
+  </section>
+
+  <section class="sub faq" id="s1-6">
+    <h3><span class="no">1.6</span>常见问题</h3>
+    <details><summary>参数太多，不知道什么意思怎么办？</summary>把鼠标悬停在参数行上看中文提示；想看更完整的解释与影响，去 <a href="#s2-2">2.2 全参数参考</a>。参数说明以程序内悬停提示为准——程序更新后悬停内容会跟随最新版本，本页静态内容可能略有滞后。</details>
+    <details><summary>手动 winget 升级后参数会和界面脱节吗？</summary>不会。参数表在程序每次启动时自动与 <code>llama-server --help</code> 对账，升级完重启一次程序即可。</details>
+    <details><summary>模型应该放在哪里？</summary>放在 <code>config.json</code> 里 <code>models_dir</code> 指向的目录（默认是程序目录的上一级），扩展名必须是 <code>.gguf</code>。</details>
+    <details><summary>点「帮助」没反应？</summary>说明 <code>help_url</code> 指向的本地文件不存在（默认应为程序目录下的 <code>help/index.html</code>），或网络地址不可达。程序会弹出警告提示；部署在线站点后把 <code>help_url</code> 改成完整网址即可。</details>
+    <details><summary>加载模型时报显存不足 / OOM？</summary>三选一：降低 GPU 层数（<code>-ngl</code>）、调小上下文（<code>-c</code>）、换更小量化等级的模型文件。原理见 <a href="#s2-1">2.1 常用参数精讲</a>。</details>
+    <details><summary>端口被占用，启动失败？</summary>改「服务器」分组里的 <code>--port</code>（默认 8080）为其他未被占用的端口，再重启模型。</details>
+  </section>
+</section>
+
+<!-- ═══════════════ 第二章 ═══════════════ -->
+<section class="chapter" id="s2">
+  <h2 class="chap">第二章 · llama.cpp 通用知识<span class="en">llama.cpp Basics</span></h2>
+
+  <section class="sub" id="s2-0">
+    <h3><span class="no">2.0</span>入门概念：看懂大模型的"黑话"</h3>
+
+    <div class="card concept">
+      <h4>🧩 Token：模型眼里的"字"</h4>
+      <p>模型不是按"字"处理文字的，而是按 <strong>token</strong>——一段模型词表里的基本单元。一个英文单词约等于 1~2 个 token，一个汉字通常是 1 个 token 左右。所有和"数量"有关的参数（上下文长度、预测长度、批大小）单位都是 token。</p>
+    </div>
+
+    <div class="card concept">
+      <h4>🪟 上下文窗口（Context）：模型一次能"记住"多少内容</h4>
+      <p>上下文长度（<code>--ctx-size</code>，<code>-c</code>）决定一次对话中模型能同时看见的 token 总量——包括你的提问、它已经生成的内容以及系统提示。超出了就"记不住"最早的内容。4k≈能读几页文档，32k≈能读一篇长报告，128k 以上则接近整本书。上下文越大，显存占用越高。</p>
+    </div>
+
+    <div class="card concept">
+      <h4>📦 量化与 GGUF：又小又能跑的模型文件</h4>
+      <p><strong>GGUF</strong> 是 llama.cpp 使用的模型文件格式，所有 <code>.gguf</code> 文件都是它。<strong>量化（Quantization）</strong>是把模型权重从高精度小数压缩成低精度整数的过程——模型能力几乎不损失，文件体积和显存占用大幅下降。</p>
+      <p>看懂文件名：<code>Qwen3-8B-Q4_K_M.gguf</code> = 模型名 Qwen3、参数量 8B（80 亿）、量化格式 Q4_K_M。量化等级从粗到细大致是：</p>
+      <table>
+        <tr><th>等级</th><th>每权重约占用</th><th>特点</th></tr>
+        <tr><td><code>Q2/Q3</code></td><td>2~3.5 bit</td><td>体积最小，质量下降明显，仅极限压缩时使用</td></tr>
+        <tr><td><code>Q4_K_M</code></td><td>≈4.8 bit</td><td><b>最常用的平衡档</b>，推荐默认选择</td></tr>
+        <tr><td><code>Q5_K_M / Q6_K</code></td><td>5.5~6.6 bit</td><td>更接近原版质量，体积约大 20%~40%</td></tr>
+        <tr><td><code>Q8_0</code></td><td>≈8.5 bit</td><td>几乎无损，体积接近原始模型的一半</td></tr>
+        <tr><td><code>F16</code></td><td>16 bit</td><td>原始精度，一般只用于继续训练</td></tr>
+      </table>
+      <p>估算显存：8B 模型的 Q4_K_M 约 5GB，加上上下文缓存的开销，一块 8GB 显存的显卡即可运行。</p>
+    </div>
+
+    <div class="card concept">
+      <h4>🎮 GPU Offload：把模型"搬"进显卡</h4>
+      <p>大模型由很多层（layer）组成。<strong>GPU 卸载</strong>（<code>--n-gpu-layers</code>，<code>-ngl</code>）指把其中 N 层放进显存里用显卡计算——显卡算得快，但显存有限；放不下的层留在 CPU/内存里慢慢算。<code>-ngl 999</code>（或 <code>all</code>）表示"全部塞进显卡"，是最常用的写法；显存不够时程序会自动减层或直接报错，此时调小数字即可。</p>
+    </div>
+
+    <div class="card concept">
+      <h4>🎲 采样：为什么同一句话每次回答都不一样</h4>
+      <p>模型每一步其实是在给"下一个 token 的所有候选"打概率分，<strong>采样</strong>就是从这个榜单里挑一个的过程：</p>
+      <ul>
+        <li><strong>温度（<code>--temp</code>）</strong>：控制"敢不敢冒险"。低温（0.1~0.5）回答稳定保守，适合写代码、做问答；高温（0.8~1.2+）回答更有创意、更发散，适合写小说，但太低会显得呆板、太高会语无伦次。</li>
+        <li><strong>Top-P（<code>--top-p</code>）</strong>：只从"累计概率前 P"的候选里挑。0.9 表示只考虑加起来占 90% 概率的那批词，把长尾胡话过滤掉。</li>
+        <li><strong>Top-K（<code>--top-k</code>）</strong>：只从概率最高的 K 个候选里挑，是 Top-P 的"按个数"版本。</li>
+      </ul>
+      <p>日常使用：<code>--temp 0.7 --top-p 0.9</code> 是稳妥的起点；想要更稳就降温，想要更"放飞"就升温。</p>
+    </div>
+  </section>
+
+  <section class="sub" id="s2-1">
+    <h3><span class="no">2.1</span>常用参数精讲：设大设小会怎样</h3>
+    <p>以下是最常被调动的参数。每张卡片解释"它是什么、为什么存在、调大调小各有什么影响"。</p>
+
+    <div class="card">
+      <h4><code>-ngl</code> / <code>--n-gpu-layers</code> — GPU 卸载层数</h4>
+      <p>决定多少层模型权重放进显存。这是对速度影响最大的单一参数。</p>
+      <div class="tune">
+        <div class="up">显存占用↑、生成速度↑（越多层走显卡）。设 <code>999</code> 或 <code>auto</code> 让程序自动装满。</div>
+        <div class="down">显存占用↓，但更多层落到 CPU 上，速度明显变慢。显存不够 / OOM 时往下调。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><code>-c</code> / <code>--ctx-size</code> — 上下文长度</h4>
+      <p>一次对话能容纳的 token 总量，直接决定显存中 KV 缓存的大小。</p>
+      <div class="tune">
+        <div class="up">能"记住"的对话/文档更长，但显存占用显著增加（与 token 数近似成正比）。</div>
+        <div class="down">省显存，但长对话会被截断、长文档读不完。日常 8k~32k 足够。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><code>-t</code> / <code>--threads</code> — CPU 线程数</h4>
+      <p>模型跑在 CPU 上的部分用几个线程计算。一般等于物理核心数（不含超线程）。</p>
+      <div class="tune">
+        <div class="up">超过物理核心数后收益趋零甚至变慢（超线程争抢）。</div>
+        <div class="down">CPU 部分变慢；但留出核心给系统和其他程序更流畅。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><code>-b</code> / <code>--batch-size</code> 与 <code>-ub</code> / <code>--ubatch-size</code> — 批大小</h4>
+      <p>模型一次"咀嚼"多少 token：逻辑批（<code>-b</code>）是上限，物理批（<code>-ub</code>）是实际每步的计算粒度。默认 2048 / 512 通常不用动。</p>
+      <div class="tune">
+        <div class="up">喂长提示词（prefill）更快，但显存峰值更高。</div>
+        <div class="down">省显存，长提示处理变慢。显存紧张时先把 <code>-ub</code> 降到 256 或 128。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><code>-n</code> / <code>--predict</code> — 预测 token 数</h4>
+      <p>单次回复最多生成多少 token。<code>-1</code> 表示不限制，由上下文或停止符决定结束。</p>
+      <div class="tune">
+        <div class="up">允许更长的单次输出（长文写作可设大或 -1）。</div>
+        <div class="down">回复被截短，但可以避免模型"刹不住车"刷屏。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><code>--temp</code> — 温度（随机性）</h4>
+      <p>见 <a href="#s2-0">2.0 采样概念</a>。默认 0.8。</p>
+      <div class="tune">
+        <div class="up">回答更有创意、多样，但可能跑偏、胡说（&gt;1.2 明显失控）。</div>
+        <div class="down">回答稳定、准确、可复现；太低（&lt;0.3）会呆板重复。写代码建议 0.2~0.6，写小说 0.8~1.1。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><code>--top-p</code> — 核采样阈值</h4>
+      <p>只从累计概率前 P 的候选中采样。默认 0.95。</p>
+      <div class="tune">
+        <div class="up">保留更多低概率候选，输出更丰富也更冒险。</div>
+        <div class="down">输出更保守；过低（&lt;0.5）会只在几个固定词里打转。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><code>--top-k</code> — 候选数上限</h4>
+      <p>只在概率最高的 K 个 token 里采样。默认 40，设 0 表示关闭。</p>
+      <div class="tune">
+        <div class="up">候选更多、更发散。</div>
+        <div class="down">更收敛；配合温度使用，一般不需要大动。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><code>-np</code> / <code>--parallel</code> — 并行槽位数</h4>
+      <p>服务器同时处理几个请求，每个请求占用一个"槽位"和一份 KV 缓存。</p>
+      <div class="tune">
+        <div class="up">能同时服务多人/多任务，但上下文会被均分、显存成倍增长。</div>
+        <div class="down">单人使用保持 1 即可，上下文与显存都归一个请求独享。</div>
+      </div>
+    </div>
+
+    <div class="tip">💡 其余参数的含义与默认值，在 <a href="#s2-2">2.2 全参数参考</a> 中按分组逐一列出；也可以直接在程序里把鼠标悬停在参数行上查看。</div>
+  </section>
+
+  <section class="sub" id="s2-2">
+    <h3><span class="no">2.2</span>全参数参考</h3>
+    <p>覆盖 llama-shell 当前版本 <code>llama-server --help</code> 的<strong>全部参数</strong>，按界面标签页分组。每条包含：命令行写法（含等价别名）、类型、默认值、可选值与中文含义，并在最后附上一句<b>白话解说</b>，把术语翻译成大白话，方便新手直接理解。</p>
+    <div class="gen-note">本节由参数定义表自动生成（生成脚本：<code>tools/gen_help_params.py</code>）。程序升级后重新生成即可同步；数值范围未逐一注明的，以 <code>llama-server --help</code> 输出为准。</div>
+<!-- PARAMS:BEGIN -->
+<div class="group-nav"><a href="#pgrp-server">服务器</a><a href="#pgrp-model">模型</a><a href="#pgrp-performance">性能</a><a href="#pgrp-sampling">采样</a><a href="#pgrp-reasoning">推理</a><a href="#pgrp-speculative">投机</a><a href="#pgrp-multimodal">多模态</a><a href="#pgrp-logging">日志</a><a href="#pgrp-advanced">高级</a></div>
+<div class="param-group" id="pgrp-server">
+  <h3>服务器（Server · 34 项）</h3>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--host</span><span class="plabel">监听地址</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: 127.0.0.1</span></div>
+  <div class="pdesc">IP 地址(逗号分隔多个), 或以 .sock 结尾绑定 UNIX socket; 多个 TCP 地址时 :: 仅绑定 IPv6</div>
+  <div class="pplain"><b>白话解说</b>服务器“住在”哪个地址。默认 127.0.0.1 = 只有这台电脑自己能连；想让局域网里别人也能访问，就改成 0.0.0.0。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--port</span><span class="plabel">监听端口</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 8080</span></div>
+  <div class="pdesc">端口号</div>
+  <div class="pplain"><b>白话解说</b>服务器的“门牌号”（端口）。默认 8080，一般不用改；只有端口被占用时才需要换一个。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--api-key</span><span class="plabel">API Key</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">API 认证密钥, 多个用逗号分隔</div>
+  <div class="pplain"><b>白话解说</b>给服务器“上锁”的密码。填了之后，任何人访问 API 都必须带上这个密码，防止陌生人乱用。多个用逗号隔开。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--api-key-file</span><span class="plabel">API Key文件</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">存放 API Key 的文件, 每行一个, # 开头的行视为注释</div>
+  <div class="pplain"><b>白话解说</b>把上面的密码写进一个文件里，比直接写在命令行更安全、更好管理。每行一个，用 # 开头的行不算数。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--timeout</span> <span class="fsep">·</span> <span class="flag">-to</span><span class="plabel">超时(秒)</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 3600</span></div>
+  <div class="pdesc">服务端读写超时</div>
+  <div class="pplain"><b>白话解说</b>服务器等对方多久没动静就算“断开”。默认 3600 秒（1 小时），一般不用动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--alias</span> <span class="fsep">·</span> <span class="flag">-a</span><span class="plabel">模型别名</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">API 中的模型名称, 逗号分隔多个; 留空则自动使用模型文件名(否则 API 会返回完整本地路径)</div>
+  <div class="pplain"><b>白话解说</b>给模型起个好认的“外号”。留空就直接显示文件名；如果不想把本地文件路径暴露给别人，就填个别名。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--tags</span><span class="plabel">模型标签</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">模型标签, 逗号分隔(仅信息展示)</div>
+  <div class="pplain"><b>白话解说</b>给模型贴几个“标签”方便辨认，只是展示用，不影响任何功能。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--threads-http</span><span class="plabel">HTTP线程数</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">处理 HTTP 请求的线程数</div>
+  <div class="pplain"><b>白话解说</b>用几个“人手”同时接待网页请求。默认 -1 = 自动判断，一般不用管。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--reuse-port</span><span class="plabel">端口复用</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">允许多个 socket 绑定同一端口</div>
+  <div class="pplain"><b>白话解说</b>允许两个程序抢同一个“门牌号”（端口）。一般默认关闭就行。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--sse-ping-interval</span><span class="plabel">SSE心跳(秒)</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 30</span></div>
+  <div class="pdesc">SSE ping 间隔 (-1=禁用)</div>
+  <div class="pplain"><b>白话解说</b>服务器每隔几秒给网页发个“我还活着”的信号，防止长时间没动静连接被断开。-1 = 关掉这个功能。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--api-prefix</span><span class="plabel">API前缀</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">API 路径前缀, 不含结尾斜杠</div>
+  <div class="pplain"><b>白话解说</b>给 API 地址前面统一加一段路径前缀，用于区分或路由。一般留空。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--path</span><span class="plabel">静态文件目录</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">提供静态文件的目录</div>
+  <div class="pplain"><b>白话解说</b>指定一个文件夹，服务器顺便把这个文件夹里的网页/文件也对外开放。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cors-origins</span><span class="plabel">CORS来源</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">允许的 CORS 来源, 逗号分隔; 特殊值 localhost 表示仅对 localhost 回显 Origin 头</div>
+  <div class="pplain"><b>白话解说</b>允许哪些“别的网站”来调用你的服务器。填 localhost = 只放行本机网页，更安全。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cors-methods</span><span class="plabel">CORS方法</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">允许的 CORS 方法</div>
+  <div class="pplain"><b>白话解说</b>允许别的网页用哪些方式请求（比如 GET 读取、POST 写入）。按实际需要填。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cors-headers</span><span class="plabel">CORS请求头</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">允许的 CORS 请求头</div>
+  <div class="pplain"><b>白话解说</b>允许别的网页额外携带哪些信息（请求头）。一般用默认即可。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cors-credentials</span><span class="palias">等价写法: --no-cors-credentials</span><span class="plabel">CORS凭证</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">是否允许 CORS 携带凭证</div>
+  <div class="pplain"><b>白话解说</b>要不要允许别的网页带上你的登录凭证（Cookie）来访问。涉及敏感信息，默认关更安全。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ssl-key-file</span><span class="plabel">SSL私钥</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">PEM 格式 SSL 私钥文件</div>
+  <div class="pplain"><b>白话解说</b>HTTPS 加密用的“钥匙”（私钥）文件。想用 https:// 访问时才需要填。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ssl-cert-file</span><span class="plabel">SSL证书</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">PEM 格式 SSL 证书文件</div>
+  <div class="pplain"><b>白话解说</b>HTTPS 加密用的“证书”文件，和上面的私钥配套使用。想加密传输才需要。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ui</span> <span class="fsep">·</span> <span class="flag">--webui</span><span class="palias">等价写法: --no-ui · --no-webui</span><span class="plabel">Web UI</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">启用内置 Web UI</div>
+  <div class="pplain"><b>白话解说</b>要不要打开自带的网页聊天界面。开着就有现成的网页窗口可以用，默认开着即可。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ui-config</span> <span class="fsep">·</span> <span class="flag">--webui-config</span><span class="plabel">WebUI配置</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">Web UI 默认设置的 JSON 字符串</div>
+  <div class="pplain"><b>白话解说</b>用一段 JSON 预设网页界面的显示/行为。一般不用填。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ui-config-file</span> <span class="fsep">·</span> <span class="flag">--webui-config-file</span><span class="plabel">WebUI配置文件</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">Web UI 设置的 JSON 文件</div>
+  <div class="pplain"><b>白话解说</b>把上面网页界面的预设设置存成一个文件，启动时自动读取。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--metrics</span><span class="plabel">Prometheus指标</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">启用 Prometheus 兼容指标端点</div>
+  <div class="pplain"><b>白话解说</b>打开一个“体检报告”接口，供监控软件读取服务器运行状态。用不到就保持关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--props</span><span class="plabel">属性端点</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">允许通过 POST /props 修改全局属性</div>
+  <div class="pplain"><b>白话解说</b>允许别人通过 POST 接口临时修改服务器的全局属性。默认关闭更安全。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--slots</span><span class="palias">等价写法: --no-slots</span><span class="plabel">槽位端点</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">暴露槽位监控端点</div>
+  <div class="pplain"><b>白话解说</b>要不要开放查看“槽位”占用情况的接口。一般默认即可。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--slot-save-path</span><span class="plabel">槽位保存目录</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">保存槽位 KV 缓存的目录</div>
+  <div class="pplain"><b>白话解说</b>指定一个文件夹，把“槽位”的中间缓存保存到里面，重启后可以复用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--media-path</span><span class="plabel">媒体目录</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">本地媒体文件目录(file:// 相对路径)</div>
+  <div class="pplain"><b>白话解说</b>指定一个文件夹放本地图片/文件，网页里可以用相对路径引用它们。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--connect</span><span class="plabel">P2P隧道</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">(实验性) 用 llama-connect 为服务器建立点对点隧道 (默认禁用)</div>
+  <div class="pplain"><b>白话解说</b>实验功能：建一个点对点隧道，让外网也能访问你的服务器（穿透内网）。一般用不到。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--connect-code</span><span class="plabel">隧道配对码</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">手动指定 --connect 的 40 字符配对码 (默认每次运行自动生成)</div>
+  <div class="pplain"><b>白话解说</b>连接隧道用的配对码。通常自动生成，一般不用手动填。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--embedding</span> <span class="fsep">·</span> <span class="flag">--embeddings</span><span class="plabel">嵌入模式</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">仅支持嵌入用例</div>
+  <div class="pplain"><b>白话解说</b>只让模型做“文本转向量”（嵌入），不用于聊天，供其他程序检索使用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--rerank</span> <span class="fsep">·</span> <span class="flag">--reranking</span><span class="plabel">重排序模式</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">启用重排序端点</div>
+  <div class="pplain"><b>白话解说</b>开启“重排序”接口，帮搜索引擎把更相关的结果排到前面。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--pooling</span><span class="plabel">池化类型</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / none / mean / cls / last / rank</span></div>
+  <div class="pdesc">嵌入的池化方式</div>
+  <div class="pplain"><b>白话解说</b>选一种方法，把一整段文字的向量“浓缩”成一个代表值。做检索才会用到，按需选。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--embd-normalize</span><span class="plabel">嵌入归一化</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 2</span></div>
+  <div class="pdesc">-1=无, 0=max, 1=taxicab, 2=欧氏, &gt;2=p范数</div>
+  <div class="pplain"><b>白话解说</b>要不要把向量“拉齐到同一长度”方便互相比较。用默认 2 就行。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--sleep-idle-seconds</span><span class="plabel">空闲休眠(秒)</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">空闲该秒数后服务器休眠 (-1=禁用)</div>
+  <div class="pplain"><b>白话解说</b>长时间没人用时让服务器“睡觉”省资源。-1 = 永不睡觉。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--slot-prompt-similarity</span> <span class="fsep">·</span> <span class="flag">-sps</span><span class="plabel">槽位匹配阈值</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.1</span></div>
+  <div class="pdesc">复用槽位所需的提示相似度 (0.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>新来的问题和缓存里旧问题有多像，就直接复用旧结果，省去重复计算。0 = 不复用。</div>
+</div>
+</div>
+<div class="param-group" id="pgrp-model">
+  <h3>模型（Model · 40 项）</h3>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--model</span> <span class="fsep">·</span> <span class="flag">-m</span><span class="plabel">模型文件</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">模型路径(自动注入)</div>
+  <div class="pplain"><b>白话解说</b>指定加载哪个模型文件。程序里会自动帮你填好，一般不用手写。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--model-url</span> <span class="fsep">·</span> <span class="flag">-mu</span><span class="plabel">模型下载地址</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">从 URL 下载并加载模型 (默认未使用)</div>
+  <div class="pplain"><b>白话解说</b>直接填一个网址，让程序从网上下载模型再加载。默认不用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--docker-repo</span> <span class="fsep">·</span> <span class="flag">-dr</span><span class="plabel">Docker模型库</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">Docker Hub 模型仓库 [&lt;repo&gt;/]&lt;model&gt;[:quant], repo 默认 ai/, quant 默认 latest</div>
+  <div class="pplain"><b>白话解说</b>从 Docker 仓库里拉取模型。用 Docker 部署的人才需要填。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--hf-repo</span> <span class="fsep">·</span> <span class="flag">-hf</span><span class="palias">等价写法: -hfr</span><span class="plabel">HF模型仓库</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">Hugging Face 仓库 &lt;user&gt;/&lt;model&gt;[:quant], quant 默认 Q4_K_M; 可用 mmproj 会自动下载(禁用加 --no-mmproj)</div>
+  <div class="pplain"><b>白话解说</b>填 Hugging Face 上的模型地址（格式：用户名/模型名），程序自动下载。默认量化版本是 Q4_K_M。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--hf-file</span> <span class="fsep">·</span> <span class="flag">-hff</span><span class="plabel">HF模型文件</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">指定 HF 仓库中的具体文件, 覆盖 --hf-repo 的 quant 选择</div>
+  <div class="pplain"><b>白话解说</b>指定 HF 仓库里具体用哪一个文件，用来覆盖上面默认的量化版本。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--hf-token</span> <span class="fsep">·</span> <span class="flag">-hft</span><span class="plabel">HF访问令牌</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">Hugging Face 访问令牌 (默认取 HF_TOKEN 环境变量)</div>
+  <div class="pplain"><b>白话解说</b>下载需要登录的私有模型时，填上你的 HF 令牌（相当于密码）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ctx-size</span> <span class="fsep">·</span> <span class="flag">-c</span><span class="plabel">上下文长度</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">提示上下文大小 (0=从模型加载)</div>
+  <div class="pplain"><b>白话解说</b>模型最多能“记住”多长的文字（上下文）。越长记性越好但越占显存。0 = 用模型自带的默认值。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--n-gpu-layers</span> <span class="fsep">·</span> <span class="flag">-ngl</span><span class="palias">等价写法: --gpu-layers</span><span class="plabel">GPU层数</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: auto</span></div>
+  <div class="pdesc">VRAM 层数 (数字/auto/all)</div>
+  <div class="pplain"><b>白话解说</b>把模型多少“层”放到显卡上算。放得越多越快但越占显存；auto/all = 能放多少放多少。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--predict</span> <span class="fsep">·</span> <span class="flag">-n</span><span class="palias">等价写法: --n-predict</span><span class="plabel">预测Token数</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">预测 token 数 (-1=无限)</div>
+  <div class="pplain"><b>白话解说</b>一次最多让模型生成多长内容。-1 = 不限长度，一直写到自然结束。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--keep</span><span class="plabel">保留Token数</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">从初始提示保留的 token 数 (-1=全部)</div>
+  <div class="pplain"><b>白话解说</b>保留对话开头多少字不丢（用于长对话裁剪）。-1 = 全部保留。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--batch-size</span> <span class="fsep">·</span> <span class="flag">-b</span><span class="plabel">批大小</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 2048</span></div>
+  <div class="pdesc">逻辑最大批大小</div>
+  <div class="pplain"><b>白话解说</b>每批一次性处理多少内容，影响速度和显存。默认 2048，一般不用动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ubatch-size</span> <span class="fsep">·</span> <span class="flag">-ub</span><span class="plabel">物理批大小</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 512</span></div>
+  <div class="pdesc">物理最大批大小</div>
+  <div class="pplain"><b>白话解说</b>内部真正分批处理的大小。调小能省显存，调大可能更快。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--parallel</span> <span class="fsep">·</span> <span class="flag">-np</span><span class="plabel">并行槽位</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">服务器槽数 (-1=自动)</div>
+  <div class="pplain"><b>白话解说</b>同时能接待几个“客人”（请求）。越多越占显存，一个人用填 1 就够。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--swa-full</span><span class="plabel">全尺寸SWA缓存</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用全尺寸 SWA 缓存</div>
+  <div class="pplain"><b>白话解说</b>是否用完整尺寸的缓存（更稳但更占显存）。一般默认即可。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--split-mode</span> <span class="fsep">·</span> <span class="flag">-sm</span><span class="plabel">多GPU拆分</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / none / layer / row / tensor</span></div>
+  <div class="pdesc">多 GPU 拆分方式</div>
+  <div class="pplain"><b>白话解说</b>多张显卡时怎么分配活儿。layer = 按层分，row = 按行分。默认自动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--tensor-split</span> <span class="fsep">·</span> <span class="flag">-ts</span><span class="plabel">张量拆分比例</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">各 GPU 卸载比例, 逗号分隔, 如 3,1</div>
+  <div class="pplain"><b>白话解说</b>多卡时各张卡分担多少比例。比如“3,1”表示一张分 3 份、另一张分 1 份。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--main-gpu</span> <span class="fsep">·</span> <span class="flag">-mg</span><span class="plabel">主GPU</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">主 GPU 索引</div>
+  <div class="pplain"><b>白话解说</b>指定用第几张显卡当主力（从 0 开始数）。一般默认 0。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--device</span> <span class="fsep">·</span> <span class="flag">-dev</span><span class="plabel">使用设备</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">卸载使用的设备列表(none=不卸载)</div>
+  <div class="pplain"><b>白话解说</b>指定把模型放到哪些设备（显卡/CPU）。none = 全用 CPU。一般不用动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--rpc</span><span class="plabel">RPC服务器</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">RPC 服务器列表 host:port, 逗号分隔</div>
+  <div class="pplain"><b>白话解说</b>借用其他电脑的显卡来算（远程计算）。格式：地址:端口。一般用不到。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--fit</span> <span class="fsep">·</span> <span class="flag">-fit</span><span class="plabel">自动适配显存</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / on / off</span></div>
+  <div class="pdesc">自动调整未设置参数以适配设备显存 (帮助中默认为 on)</div>
+  <div class="pplain"><b>白话解说</b>让程序自动算好参数，尽量让你的显卡装得下模型。默认开启，小白友好。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--fit-target</span> <span class="fsep">·</span> <span class="flag">-fitt</span><span class="plabel">适配余量(MiB)</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">每设备目标余量, 逗号分隔, 默认 1024</div>
+  <div class="pplain"><b>白话解说</b>自动适配时，给每张显卡留多少空闲显存当“安全余量”。默认 1024。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--fit-ctx</span> <span class="fsep">·</span> <span class="flag">-fitc</span><span class="plabel">最小适配上下文</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 4096</span></div>
+  <div class="pdesc">--fit 可设置的最小 ctx 大小</div>
+  <div class="pplain"><b>白话解说</b>自动省显存时，上下文长度最少保底多少。默认 4096。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cpu-moe</span> <span class="fsep">·</span> <span class="flag">-cmoe</span><span class="plabel">MoE留在CPU</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">MoE 权重全部保留在 CPU</div>
+  <div class="pplain"><b>白话解说</b>让 MoE 模型（混合专家）的大部分权重待在内存里、不上显卡，从而在小显存上也能跑大模型。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--n-cpu-moe</span> <span class="fsep">·</span> <span class="flag">-ncmoe</span><span class="plabel">MoE层留CPU</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">前 N 层 MoE 权重保留在 CPU</div>
+  <div class="pplain"><b>白话解说</b>把 MoE 模型前 N 层的专家权重放内存（不上显卡），进一步省显存。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--moe-cache-mib</span><span class="plabel">MoE专家缓存</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">常驻 GPU 缓存的 CPU MoE 专家权重上限 (MiB); 多卡时按 --tensor-split 比例拆分, 0=禁用</div>
+  <div class="pplain"><b>白话解说</b>允许把多少专家权重常驻在显卡缓存里，在速度和显存之间取平衡。0 = 不常驻。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--n-cpu-ffn</span> <span class="fsep">·</span> <span class="flag">-ncffn</span><span class="plabel">FFN层留CPU</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">前 N 层稠密 FFN 权重保留在 CPU (仅稠密模型, MoE 专家权重用 --n-cpu-moe)</div>
+  <div class="pplain"><b>白话解说</b>把普通模型前 N 层的计算层放内存来省显存（只对非 MoE 模型生效）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--override-tensor</span> <span class="fsep">·</span> <span class="flag">-ot</span><span class="plabel">覆盖张量缓冲</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">张量名模式=缓冲类型, 逗号分隔</div>
+  <div class="pplain"><b>白话解说</b>高级微调：手动指定某些层放在哪里。不懂别碰。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--check-tensors</span><span class="plabel">校验张量</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">检查模型张量数据是否含非法值</div>
+  <div class="pplain"><b>白话解说</b>加载时检查模型数据有没有异常/损坏，发现问题会报警。默认关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--override-kv</span><span class="plabel">覆盖元数据</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">KEY=TYPE:VALUE 覆盖模型元数据</div>
+  <div class="pplain"><b>白话解说</b>高级项：手动覆盖模型里的参数信息。不懂别动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--embd-gemma-default</span><span class="plabel">预设·EmbeddingGemma</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用默认 EmbeddingGemma 嵌入模型 (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>一键启用 Google 的 EmbeddingGemma 做嵌入，会自动联网下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--fim-qwen-1.5b-default</span><span class="plabel">预设·Qwen2.5-Coder-1.5B</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用默认 Qwen 2.5 Coder 1.5B (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>一键启用 Qwen2.5 代码模型（1.5B），会自动联网下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--fim-qwen-3b-default</span><span class="plabel">预设·Qwen2.5-Coder-3B</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用默认 Qwen 2.5 Coder 3B (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>一键启用 Qwen2.5 代码模型（3B），会自动联网下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--fim-qwen-7b-default</span><span class="plabel">预设·Qwen2.5-Coder-7B</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用默认 Qwen 2.5 Coder 7B (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>一键启用 Qwen2.5 代码模型（7B），会自动联网下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--fim-qwen-7b-spec</span><span class="plabel">预设·Qwen2.5-Coder-7B+草稿</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">Qwen 2.5 Coder 7B + 0.5B 草稿模型做投机解码 (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>用 Qwen 7B 代码模型 + 一个很小的草稿模型来加速生成，会自动下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--fim-qwen-14b-spec</span><span class="plabel">预设·Qwen2.5-Coder-14B+草稿</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">Qwen 2.5 Coder 14B + 0.5B 草稿模型做投机解码 (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>用 Qwen 14B 代码模型 + 一个小草稿模型加速生成，会自动下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--fim-qwen-30b-default</span><span class="plabel">预设·Qwen3-Coder-30B-A3B</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用默认 Qwen 3 Coder 30B A3B Instruct (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>一键启用 Qwen3 代码模型（30B），会自动联网下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--gpt-oss-20b-default</span><span class="plabel">预设·gpt-oss-20b</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用 gpt-oss-20b (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>一键启用 gpt-oss-20b 模型，会自动联网下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--gpt-oss-120b-default</span><span class="plabel">预设·gpt-oss-120b</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用 gpt-oss-120b (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>一键启用 gpt-oss-120b 模型，会自动联网下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--vision-gemma-4b-default</span><span class="plabel">预设·Gemma3-4B-QAT</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用 Gemma 3 4B QAT (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>一键启用 Gemma3 4B 模型（支持看图），会自动联网下载权重。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--vision-gemma-12b-default</span><span class="plabel">预设·Gemma3-12B-QAT</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">使用 Gemma 3 12B QAT (会从网络下载权重)</div>
+  <div class="pplain"><b>白话解说</b>一键启用 Gemma3 12B 模型（支持看图），会自动联网下载权重。</div>
+</div>
+</div>
+<div class="param-group" id="pgrp-performance">
+  <h3>性能（Performance · 35 项）</h3>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--threads</span> <span class="fsep">·</span> <span class="flag">-t</span><span class="plabel">CPU线程数</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">生成时 CPU 线程数</div>
+  <div class="pplain"><b>白话解说</b>用几个 CPU 核心来干活（生成时）。-1 = 自动。一般不用动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--threads-batch</span> <span class="fsep">·</span> <span class="flag">-tb</span><span class="plabel">批处理线程</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">批处理 CPU 线程数</div>
+  <div class="pplain"><b>白话解说</b>处理大批量数据时用几个 CPU 核心。-1 = 自动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cpu-mask</span> <span class="fsep">·</span> <span class="flag">-C</span><span class="plabel">CPU掩码</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">CPU 亲和掩码(任意长度十六进制)</div>
+  <div class="pplain"><b>白话解说</b>高级项：精确指定用哪几个具体的 CPU 核心（十六进制）。一般不用碰。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cpu-range</span> <span class="fsep">·</span> <span class="flag">-Cr</span><span class="plabel">CPU范围</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">CPU 亲和范围 lo-hi</div>
+  <div class="pplain"><b>白话解说</b>高级项：指定用第几个到第几个 CPU 核心。一般不用碰。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cpu-strict</span><span class="plabel">严格CPU绑定</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / 0 / 1</span></div>
+  <div class="pdesc">是否使用严格 CPU 绑定</div>
+  <div class="pplain"><b>白话解说</b>是否强制线程只能锁在指定的核心上。一般默认即可。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--prio</span><span class="plabel">线程优先级</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">low(-1)/normal(0)/medium(1)/high(2)/realtime(3)</div>
+  <div class="pplain"><b>白话解说</b>给计算线程设优先级。0 = 正常，越高越优先。一般不用改。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--poll</span><span class="plabel">轮询级别</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 50</span></div>
+  <div class="pdesc">等待工作的轮询级别 (0=不轮询)</div>
+  <div class="pplain"><b>白话解说</b>高级项：线程忙等检查任务的频率。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cpu-mask-batch</span> <span class="fsep">·</span> <span class="flag">-Cb</span><span class="plabel">批CPU掩码</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">批处理 CPU 亲和掩码</div>
+  <div class="pplain"><b>白话解说</b>高级项：批量处理时指定用哪些核心。一般不用碰。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cpu-range-batch</span> <span class="fsep">·</span> <span class="flag">-Crb</span><span class="plabel">批CPU范围</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">批处理 CPU 亲和范围 lo-hi</div>
+  <div class="pplain"><b>白话解说</b>高级项：批量处理时用第几到第几个核心。一般不用碰。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cpu-strict-batch</span><span class="plabel">批严格绑定</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / 0 / 1</span></div>
+  <div class="pdesc">批处理是否严格 CPU 绑定</div>
+  <div class="pplain"><b>白话解说</b>批量处理时是否强制锁核心。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--prio-batch</span><span class="plabel">批线程优先级</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">批处理线程优先级 0-3</div>
+  <div class="pplain"><b>白话解说</b>批量处理线程的优先级（0-3）。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--poll-batch</span><span class="plabel">批轮询级别</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / 0 / 1</span></div>
+  <div class="pdesc">批处理轮询级别</div>
+  <div class="pplain"><b>白话解说</b>高级项：批量处理时的轮询频率。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--flash-attn</span> <span class="fsep">·</span> <span class="flag">-fa</span><span class="plabel">Flash Attention</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: auto</span><span class="badge choice">可选值: auto / on / off</span></div>
+  <div class="pdesc">Flash Attention 开关</div>
+  <div class="pplain"><b>白话解说</b>一种又省显存又快的算法。默认 auto（能开就开）；老显卡（GTX 10 系等）不支持才需要关。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cache-type-k</span> <span class="fsep">·</span> <span class="flag">-ctk</span><span class="plabel">KV缓存K类型</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: f16</span><span class="badge choice">可选值: f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1</span></div>
+  <div class="pdesc">KV cache K 数据类型</div>
+  <div class="pplain"><b>白话解说</b>缓存 K 用什么精度存储。f16 最准最占显存；q8_0 省一半显存且质量几乎无损，长上下文强烈推荐。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cache-type-v</span> <span class="fsep">·</span> <span class="flag">-ctv</span><span class="plabel">KV缓存V类型</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: f16</span><span class="badge choice">可选值: f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1</span></div>
+  <div class="pdesc">KV cache V 数据类型</div>
+  <div class="pplain"><b>白话解说</b>缓存 V 用什么精度，和上面的 K 一样。想省显存就选 q8_0。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--load-mode</span> <span class="fsep">·</span> <span class="flag">-lm</span><span class="plabel">加载模式</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: auto</span><span class="badge choice">可选值: auto / none / mmap / mlock / mmap+mlock / dio</span></div>
+  <div class="pdesc">模型加载模式</div>
+  <div class="pplain"><b>白话解说</b>模型怎么加载进内存。auto 自动选；mlock 把模型锁在内存里防被挤走（更稳定）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--lazy-mode</span> <span class="fsep">·</span> <span class="flag">-lzm</span><span class="plabel">惰性加载</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: auto</span><span class="badge choice">可选值: on / auto / off</span></div>
+  <div class="pdesc">按需读取部分张量(需 mmap)</div>
+  <div class="pplain"><b>白话解说</b>按需读取模型（用到哪块才读哪块），能省内存，需要 mmap 支持。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--numa</span><span class="plabel">NUMA策略</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / distribute / isolate / numactl</span></div>
+  <div class="pdesc">NUMA 优化策略</div>
+  <div class="pplain"><b>白话解说</b>高级项：多 CPU 插槽机器上的优化策略。单机一般不用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--kv-offload</span> <span class="fsep">·</span> <span class="flag">-kvo</span><span class="palias">等价写法: --no-kv-offload</span><span class="plabel">KV卸载</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">是否启用 KV cache 卸载</div>
+  <div class="pplain"><b>白话解说</b>要不要把 KV 缓存放到显卡。放显卡更快但更占显存，关掉则省显存但更慢。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--op-offload</span><span class="palias">等价写法: --no-op-offload</span><span class="plabel">算子卸载</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">将主机张量运算卸载到设备</div>
+  <div class="pplain"><b>白话解说</b>是否把部分运算挪到显卡执行，一般能提速。默认即可。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--repack</span><span class="palias">等价写法: --no-repack</span><span class="plabel">权重重打包</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">是否启用权重重打包</div>
+  <div class="pplain"><b>白话解说</b>是否把模型权重重新打包以提速/省显存。一般默认开启。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--no-host</span><span class="plabel">禁用Host缓冲</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">绕过 host 缓冲以使用额外缓冲</div>
+  <div class="pplain"><b>白话解说</b>高级项：跳过一块中转内存来省显存，可能影响兼容性。一般不用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--context-shift</span><span class="palias">等价写法: --no-context-shift</span><span class="plabel">上下文移位</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">无限文本生成时的上下文移位</div>
+  <div class="pplain"><b>白话解说</b>对话太长放不下时，自动把最早的内容“挤掉”，好让长对话能一直继续下去。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cont-batching</span> <span class="fsep">·</span> <span class="flag">-cb</span><span class="palias">等价写法: --no-cont-batching</span><span class="plabel">连续批处理</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">连续批处理 (动态批处理)</div>
+  <div class="pplain"><b>白话解说</b>把多个请求动态拼在一起算，效率更高（多人/多任务时）。一般默认开启。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--warmup</span><span class="palias">等价写法: --no-warmup</span><span class="plabel">预热</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">是否用空运行进行预热</div>
+  <div class="pplain"><b>白话解说</b>启动时先空跑一次，让计算“热身”，测速更准。默认开启。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cache-prompt</span><span class="palias">等价写法: --no-cache-prompt</span><span class="plabel">提示缓存</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">是否启用提示缓存</div>
+  <div class="pplain"><b>白话解说</b>把算过的开头内容存起来，下次同样开头就直接用，能省不少时间。默认开启。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cache-reuse</span><span class="plabel">缓存复用块</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">通过 KV 移位复用缓存的最小块大小 (0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>高级项：允许把缓存里的内容“平移”复用。0 = 关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cache-ram</span> <span class="fsep">·</span> <span class="flag">-cram</span><span class="plabel">缓存上限(MiB)</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 8192</span></div>
+  <div class="pdesc">提示缓存最大大小 (-1=不限, 0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>提示缓存最多用多少内存。-1 = 不限，0 = 禁用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cache-idle-slots</span><span class="palias">等价写法: --no-cache-idle-slots</span><span class="plabel">空闲槽缓存</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">新任务时将空闲槽保存到提示缓存 (需启用 --cache-ram)</div>
+  <div class="pplain"><b>白话解说</b>空闲时把当前状态存到缓存，新任务来了能更快进入状态（需先开启 --cache-ram）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--kv-unified</span> <span class="fsep">·</span> <span class="flag">-kvu</span><span class="palias">等价写法: --no-kv-unified</span><span class="plabel">统一KV缓冲</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">所有序列共享单一 KV 缓冲</div>
+  <div class="pplain"><b>白话解说</b>让多个请求共用一块缓存，更省显存。一般默认开启。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--kv-unified-per-slot</span><span class="plabel">单槽KV上限</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">每个并行槽的上下文上限 (0=不设置)</div>
+  <div class="pplain"><b>白话解说</b>限制每个槽位最多用多少上下文，防止某个请求吃光显存。0 = 不限。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ctx-checkpoints</span> <span class="fsep">·</span> <span class="flag">-ctxcp</span><span class="palias">等价写法: --swa-checkpoints</span><span class="plabel">上下文检查点数</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 32</span></div>
+  <div class="pdesc">每槽最大上下文检查点数</div>
+  <div class="pplain"><b>白话解说</b>每个槽位最多保存几个“快照”（检查点），用于长对话回退。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--checkpoint-min-step</span> <span class="fsep">·</span> <span class="flag">-cms</span><span class="plabel">检查点间隔</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 8192</span></div>
+  <div class="pdesc">上下文检查点最小 token 间隔 (0=无限制)</div>
+  <div class="pplain"><b>白话解说</b>每隔多少字存一次检查点。0 = 不限，间隔越小存得越频繁。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spm-infill</span><span class="plabel">SPM填充模式</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">填充使用 Suffix/Prefix/Middle 模式</div>
+  <div class="pplain"><b>白话解说</b>高级项：代码补全时用 SPM 的填充方式。一般不用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--perf</span><span class="palias">等价写法: --no-perf</span><span class="plabel">性能计时</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">启用内部性能计时</div>
+  <div class="pplain"><b>白话解说</b>记录每一步花了多少时间，方便排查哪里慢。用不上就关掉。</div>
+</div>
+</div>
+<div class="param-group" id="pgrp-sampling">
+  <h3>采样（Sampling · 34 项）</h3>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--seed</span> <span class="fsep">·</span> <span class="flag">-s</span><span class="plabel">随机种子</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">RNG 种子 (-1=随机)</div>
+  <div class="pplain"><b>白话解说</b>给随机性加个“固定值”。填同一个数，两次生成结果就一样；-1 = 每次都不一样。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--temp</span> <span class="fsep">·</span> <span class="flag">--temperature</span><span class="plabel">温度</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.8</span></div>
+  <div class="pdesc">采样温度</div>
+  <div class="pplain"><b>白话解说</b>控制模型的“放飞程度”。越高越有创意但越容易跑偏，越低越稳但越死板。写代码 0.2~0.6，写小说 0.8~1.1。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--top-k</span><span class="plabel">Top-K</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 40</span></div>
+  <div class="pdesc">Top-K 采样 (0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>只允许从最可能的 K 个字里选下一个字。0 = 关闭，40 是常用值。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--top-p</span><span class="plabel">Top-P</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.95</span></div>
+  <div class="pdesc">Top-P 采样 (1.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>把可能的下一个字按概率加起来，只从前 95% 里面选。1.0 = 关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--min-p</span><span class="plabel">Min-P</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.05</span></div>
+  <div class="pdesc">Min-P 采样 (0.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>把概率太低的“胡话”候选直接剔除，能减少乱写。0 = 关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--top-nsigma</span> <span class="fsep">·</span> <span class="flag">--top-n-sigma</span><span class="plabel">Top-N-Sigma</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: -1.0</span></div>
+  <div class="pdesc">Top-N-Sigma 采样 (-1.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>高级采样：只留概率与最高值相差不大的候选。-1 = 关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--typical</span> <span class="fsep">·</span> <span class="flag">--typical-p</span><span class="plabel">Typical-P</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 1.0</span></div>
+  <div class="pdesc">局部典型采样 (1.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>选词时偏向“看起来正常”的候选，减少突兀。-1.0 = 关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--xtc-probability</span><span class="plabel">XTC概率</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.0</span></div>
+  <div class="pdesc">XTC 概率 (0.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>高级项：控制一种“故意不选最火的词”的玩法概率。0 = 关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--xtc-threshold</span><span class="plabel">XTC阈值</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.1</span></div>
+  <div class="pdesc">XTC 阈值 (1.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>高级项：两个最强候选差距多大才算“太明显”而触发特殊处理。1.0 = 关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--repeat-penalty</span><span class="plabel">重复惩罚</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 1.0</span></div>
+  <div class="pdesc">重复序列惩罚 (1.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>对刚说过的词降权，避免车轱辘话。1.0 = 不惩罚（默认）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--repeat-last-n</span><span class="plabel">惩罚窗口</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 64</span></div>
+  <div class="pdesc">惩罚考虑的最近 token 数 (0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>往前数多少字来检查是否重复。0 = 不检查。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--presence-penalty</span><span class="plabel">存在惩罚</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.0</span></div>
+  <div class="pdesc">重复存在惩罚 (0.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>只要某个词出现过，就降低它再出现的几率（避免反复讲同一个话题）。0 = 关。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--frequency-penalty</span><span class="plabel">频率惩罚</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.0</span></div>
+  <div class="pdesc">重复频率惩罚 (0.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>某个词出现得越频繁就越压着它别再出现，减少啰嗦。0 = 关。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--dry-multiplier</span><span class="plabel">DRY强度</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.0</span></div>
+  <div class="pdesc">DRY 采样倍率 (0.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>一种专门治“AI 打官腔、复读机”的力度。0 = 关闭，越大越爱说人话。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--dry-base</span><span class="plabel">DRY基数</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 1.75</span></div>
+  <div class="pdesc">DRY 采样基值</div>
+  <div class="pplain"><b>白话解说</b>DRY 惩罚强度的“基数”，配合上面使用。默认 1.75。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--dry-allowed-length</span><span class="plabel">DRY允许长度</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 2</span></div>
+  <div class="pdesc">DRY 采样允许长度</div>
+  <div class="pplain"><b>白话解说</b>允许连续重复多长的内容不惩罚（太短会误伤正常句子）。默认 2。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--dry-penalty-last-n</span><span class="plabel">DRY惩罚窗口</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 64</span></div>
+  <div class="pdesc">DRY 惩罚最近 token 数 (0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>DRY 向前数多少字来检查重复。0 = 不查。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--dry-sequence-breaker</span><span class="plabel">DRY序列断开符</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">DRY 断开符; none 表示不使用</div>
+  <div class="pplain"><b>白话解说</b>指定一些字符，一旦重复到这就强制打断。none = 不用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--adaptive-target</span><span class="plabel">Adaptive目标</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: -1.0</span></div>
+  <div class="pdesc">adaptive-p 目标概率 (负数=禁用)</div>
+  <div class="pplain"><b>白话解说</b>高级项：自适应采样想要的目标概率。负数 = 关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--adaptive-decay</span><span class="plabel">Adaptive衰减</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.9</span></div>
+  <div class="pdesc">adaptive-p 目标自适应衰减率 0.0-0.99</div>
+  <div class="pplain"><b>白话解说</b>高级项：目标概率随时间“衰减”的速度（0~0.99）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--dynatemp-range</span><span class="plabel">动态温度范围</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.0</span></div>
+  <div class="pdesc">动态温度范围 (0.0=禁用)</div>
+  <div class="pplain"><b>白话解说</b>让温度在一个区间内自动浮动（不固定）。0 = 关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--dynatemp-exp</span><span class="plabel">动态温度指数</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 1.0</span></div>
+  <div class="pdesc">动态温度指数</div>
+  <div class="pplain"><b>白话解说</b>控制动态温度变化的“形状”。一般默认 1.0。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mirostat</span><span class="plabel">Mirostat</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">Mirostat 采样 (0=禁用,1/2)</div>
+  <div class="pplain"><b>白话解说</b>一种能自动调温度、让输出一直有信息量的算法。0 = 不用，1 或 2 选一种。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mirostat-lr</span><span class="plabel">Mirostat LR</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.1</span></div>
+  <div class="pdesc">Mirostat 学习率</div>
+  <div class="pplain"><b>白话解说</b>Mirostat 自动调整的快慢（学习率）。默认 0.1。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mirostat-ent</span><span class="plabel">Mirostat熵</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 5.0</span></div>
+  <div class="pdesc">Mirostat 目标熵</div>
+  <div class="pplain"><b>白话解说</b>Mirostat 想达到的“信息丰富程度”目标值。默认 5。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--samplers</span><span class="plabel">采样器顺序</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">按顺序使用的采样器, 分号分隔</div>
+  <div class="pplain"><b>白话解说</b>高级项：用哪些采样器、按什么顺序处理。一般留空用默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--sampler-seq</span> <span class="fsep">·</span> <span class="flag">--sampling-seq</span><span class="plabel">采样器序列</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">采样器简化序列, 默认 edskypmxt</div>
+  <div class="pplain"><b>白话解说</b>高级项：用一串字母缩写指定采样顺序。默认 edskypmxt。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ignore-eos</span><span class="plabel">忽略EOS</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">忽略结束符继续生成 (等价 --logit-bias EOS-inf)</div>
+  <div class="pplain"><b>白话解说</b>让模型无视“该结束了”的信号，一直往下写。默认关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--logit-bias</span> <span class="fsep">·</span> <span class="flag">-l</span><span class="plabel">Logit偏置</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">TOKEN_ID(+/-)BIAS, 如 15043+1</div>
+  <div class="pplain"><b>白话解说</b>手动给某些字词“加分”（更爱选）或“减分”（不爱选）。例如 15043+1。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--grammar</span><span class="plabel">语法约束</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">BNF 风格语法, 约束生成内容</div>
+  <div class="pplain"><b>白话解说</b>强制模型输出符合某种格式（如 JSON、特定结构），格式不对就重来。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--grammar-file</span><span class="plabel">语法文件</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">从文件读取语法</div>
+  <div class="pplain"><b>白话解说</b>把上面的格式规则写进文件再引用，方便复用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--json-schema</span> <span class="fsep">·</span> <span class="flag">-j</span><span class="plabel">JSON Schema</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">约束生成内容为指定 JSON 结构</div>
+  <div class="pplain"><b>白话解说</b>强制模型输出的 JSON 严格符合你定义的字段结构，方便程序解析。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--json-schema-file</span> <span class="fsep">·</span> <span class="flag">-jf</span><span class="plabel">Schema文件</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">从文件读取 JSON Schema</div>
+  <div class="pplain"><b>白话解说</b>把 JSON 结构定义存成文件再引用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--backend-sampling</span> <span class="fsep">·</span> <span class="flag">-bs</span><span class="plabel">后端采样</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">将采样卸载到后端(实验性)</div>
+  <div class="pplain"><b>白话解说</b>实验功能：把选词计算交给显卡后端做。一般默认关闭。</div>
+</div>
+</div>
+<div class="param-group" id="pgrp-reasoning">
+  <h3>推理（Reasoning · 15 项）</h3>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--reasoning</span> <span class="fsep">·</span> <span class="flag">-rea</span><span class="plabel">推理模式</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: auto</span><span class="badge choice">可选值: auto / on / off</span></div>
+  <div class="pdesc">推理/思考模式</div>
+  <div class="pplain"><b>白话解说</b>让模型回答前先“过一遍脑子”（深度思考）。auto = 看模型支不支持自动开启。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--reasoning-effort</span><span class="plabel">推理力度</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: default</span><span class="badge choice">可选值: default / minimal / low / medium / high / xhigh / max</span></div>
+  <div class="pdesc">推理力度级别</div>
+  <div class="pplain"><b>白话解说</b>思考要用多大力气：minimal = 随便想想，high = 使劲想。默认 default。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--reasoning-budget</span><span class="plabel">推理预算</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">思考 token 预算 (-1=无限,0=立即结束)</div>
+  <div class="pplain"><b>白话解说</b>限制“思考”最多花多少字。-1 = 不限，0 = 不思考直接答。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--reasoning-budget-message</span><span class="plabel">预算耗尽提示</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">推理预算耗尽时注入的消息</div>
+  <div class="pplain"><b>白话解说</b>思考超预算时，自动给模型塞一句提示（比如“请直接回答”）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--reasoning-format</span><span class="plabel">推理格式</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: auto</span><span class="badge choice">可选值: auto / none / deepseek / deepseek-legacy</span></div>
+  <div class="pdesc">推理内容的返回格式</div>
+  <div class="pplain"><b>白话解说</b>思考过程以什么格式返回给程序。auto 自动，一般用默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--reasoning-preserve</span><span class="palias">等价写法: --no-reasoning-preserve</span><span class="plabel">保留推理轨迹</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">在完整历史中保留推理轨迹</div>
+  <div class="pplain"><b>白话解说</b>要不要把“思考过程”也存进对话历史里。默认随设置。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--jinja</span><span class="palias">等价写法: --no-jinja</span><span class="plabel">Jinja模板</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">聊天是否使用 Jinja 模板引擎</div>
+  <div class="pplain"><b>白话解说</b>用不用 Jinja 模板来组织聊天消息格式。一般默认开启。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--chat-template</span><span class="plabel">聊天模板</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / bailing / bailing-think / bailing2 / chatglm3 / chatglm4 / chatml / command-r / deepseek / deepseek-ocr / deepseek2 / deepseek3 / exaone-moe / exaone3 / exaone4 / falcon3 / gemma / gigachat / glmedge / gpt-oss / granite / granite-4.0 / granite-4.1 / grok-2 / hunyuan-dense / hunyuan-moe / hunyuan-vl / kimi-k2 / llama2 / llama2-sys / llama2-sys-bos / llama2-sys-strip / llama3 / llama4 / megrez / minicpm / mistral-v1 / mistral-v3 / mistral-v3-tekken / mistral-v7 / mistral-v7-tekken / monarch / openchat / orion / pangu-embedded / phi3 / phi4 / rwkv-world / seed_oss / smolvlm / solar-open / vicuna / vicuna-orca / yandex / zephyr</span></div>
+  <div class="pdesc">自定义 Jinja 聊天模板</div>
+  <div class="pplain"><b>白话解说</b>选聊天消息的“组装格式”，不同模型要配不同模板，一般会自动选对。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--chat-template-file</span><span class="plabel">聊天模板文件</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">从文件读取 Jinja 聊天模板</div>
+  <div class="pplain"><b>白话解说</b>用自己写的模板文件，给特殊需求用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--chat-template-kwargs</span><span class="plabel">模板参数</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">JSON 对象字符串, 传给模板解析器</div>
+  <div class="pplain"><b>白话解说</b>给模板传一些额外参数（JSON）。一般不用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--skip-chat-parsing</span><span class="palias">等价写法: --no-skip-chat-parsing</span><span class="plabel">跳过聊天解析</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">强制纯内容解析器, 不解析思考/工具调用</div>
+  <div class="pplain"><b>白话解说</b>把模型的输出全部当普通文本，不解析“思考”和“工具调用”。某些场景更稳定。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--prefill-assistant</span><span class="palias">等价写法: --no-prefill-assistant</span><span class="plabel">预填充助手</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">最后一条为助手消息时是否预填充</div>
+  <div class="pplain"><b>白话解说</b>提前替助手写个开头，引导它往你想要的方向说。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--special</span> <span class="fsep">·</span> <span class="flag">-sp</span><span class="plabel">特殊Token</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">输出中启用特殊 token</div>
+  <div class="pplain"><b>白话解说</b>输出时要不要保留特殊标记符号。一般默认关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--reverse-prompt</span> <span class="fsep">·</span> <span class="flag">-r</span><span class="plabel">反向提示</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">生成到该提示时停止并交还控制权 (交互模式)</div>
+  <div class="pplain"><b>白话解说</b>让模型生成到某个词就停下来（用于多人对话切换角色）。交互模式用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--escape</span> <span class="fsep">·</span> <span class="flag">-e</span><span class="palias">等价写法: --no-escape</span><span class="plabel">转义序列</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">是否处理转义序列 \n \r \t 等</div>
+  <div class="pplain"><b>白话解说</b>要不要把 \n（换行）、\t（空格）这类转义字符当真处理。一般默认。</div>
+</div>
+</div>
+<div class="param-group" id="pgrp-speculative">
+  <h3>投机（Speculative · 45 项）</h3>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-type</span><span class="plabel">投机解码类型</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / none / draft-simple / draft-eagle3 / draft-mtp / draft-dflash / draft-dspark / ngram-simple / ngram-map-k / ngram-map-k4v / ngram-mod / ngram-cache</span></div>
+  <div class="pdesc">投机解码类型, 逗号分隔</div>
+  <div class="pplain"><b>白话解说</b>选择加速方式（投机解码类型）。不懂就用默认，能明显提速。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-model</span> <span class="fsep">·</span> <span class="flag">-md</span><span class="palias">等价写法: --model-draft</span><span class="plabel">草稿模型</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">投机解码用的草稿模型路径</div>
+  <div class="pplain"><b>白话解说</b>指定一个又小又快的“打草稿”模型，配合大模型一起加速生成。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-hf</span> <span class="fsep">·</span> <span class="flag">-hfd</span><span class="palias">等价写法: -hfrd · --hf-repo-draft</span><span class="plabel">草稿HF仓库</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">同 --hf-repo, 但用于草稿模型 (默认未使用)</div>
+  <div class="pplain"><b>白话解说</b>从 Hugging Face 下载草稿模型，用法同 --hf-repo。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-ngl</span> <span class="fsep">·</span> <span class="flag">-ngld</span><span class="palias">等价写法: --n-gpu-layers-draft · --gpu-layers-draft</span><span class="plabel">草稿GPU层数</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: auto</span></div>
+  <div class="pdesc">草稿模型 VRAM 层数 (数字/auto/all)</div>
+  <div class="pplain"><b>白话解说</b>草稿模型放多少层到显卡。auto = 自动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-device</span> <span class="fsep">·</span> <span class="flag">-devd</span><span class="palias">等价写法: --device-draft</span><span class="plabel">草稿设备</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">草稿模型卸载设备列表 (none=不卸载, 默认跟随 --device)</div>
+  <div class="pplain"><b>白话解说</b>指定草稿模型放在显卡还是内存，默认跟主模型。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-n-max</span><span class="plabel">草稿最大Token</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 3</span></div>
+  <div class="pdesc">投机解码每次草稿的 token 数</div>
+  <div class="pplain"><b>白话解说</b>小草稿模型一次最多“预写”几个字。默认 3。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-n-min</span><span class="plabel">草稿最小Token</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">投机解码最少使用的草稿 token 数</div>
+  <div class="pplain"><b>白话解说</b>草稿最少预写几个字。默认 0。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-n-ubatch</span><span class="plabel">草稿物理批大小</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">草稿上下文物理最大批大小 (0=同 --n-ubatch; 调小可省显存)</div>
+  <div class="pplain"><b>白话解说</b>草稿模型的处理批大小，调小能省显存。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-p-split</span> <span class="fsep">·</span> <span class="flag">--draft-p-split</span><span class="plabel">草稿拆分概率</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.1</span></div>
+  <div class="pdesc">投机解码拆分概率</div>
+  <div class="pplain"><b>白话解说</b>高级项：草稿拆分概率。默认 0.1。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-p-min</span> <span class="fsep">·</span> <span class="flag">--draft-p-min</span><span class="plabel">草稿最小概率</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0.0</span></div>
+  <div class="pdesc">投机解码最小概率(贪心)</div>
+  <div class="pplain"><b>白话解说</b>高级项：草稿的最低概率（贪心）。默认 0。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-synth-len</span><span class="plabel">合成接受长度</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">目标平均合成接受长度(含目标 token), 仅基准测试用</div>
+  <div class="pplain"><b>白话解说</b>仅做测试用的目标接受长度，平时不用填。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-synth-rates</span><span class="plabel">合成接受概率</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">各位置无条件合成接受概率, 逗号分隔, 仅基准测试用</div>
+  <div class="pplain"><b>白话解说</b>仅做测试用的接受概率，平时不用填。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-threads</span> <span class="fsep">·</span> <span class="flag">-td</span><span class="palias">等价写法: --threads-draft</span><span class="plabel">草稿CPU线程</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">草稿模型生成线程数</div>
+  <div class="pplain"><b>白话解说</b>草稿模型用几个 CPU 核心干活。-1 = 自动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-threads-batch</span> <span class="fsep">·</span> <span class="flag">-tbd</span><span class="palias">等价写法: --threads-batch-draft</span><span class="plabel">草稿批线程</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: -1</span></div>
+  <div class="pdesc">草稿模型批处理线程数</div>
+  <div class="pplain"><b>白话解说</b>草稿模型批量处理时用几个核心。-1 = 自动。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-cpu-mask</span> <span class="fsep">·</span> <span class="flag">-Cd</span><span class="palias">等价写法: --cpu-mask-draft</span><span class="plabel">草稿CPU掩码</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">草稿模型 CPU 亲和掩码</div>
+  <div class="pplain"><b>白话解说</b>高级项：草稿用哪几个具体的核心。一般不用碰。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-cpu-range</span> <span class="fsep">·</span> <span class="flag">-Crd</span><span class="palias">等价写法: --cpu-range-draft</span><span class="plabel">草稿CPU范围</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">草稿模型 CPU 亲和范围</div>
+  <div class="pplain"><b>白话解说</b>高级项：草稿用第几到第几个核心。一般不用碰。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-cpu-strict</span> <span class="fsep">·</span> <span class="flag">--cpu-strict-draft</span><span class="plabel">草稿严格绑定</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / 0 / 1</span></div>
+  <div class="pdesc">草稿模型是否严格 CPU 绑定</div>
+  <div class="pplain"><b>白话解说</b>草稿线程是否强制锁在指定核心。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-prio</span> <span class="fsep">·</span> <span class="flag">--prio-draft</span><span class="plabel">草稿线程优先级</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">草稿模型线程优先级 0-3</div>
+  <div class="pplain"><b>白话解说</b>草稿线程的优先级（0-3）。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-poll</span> <span class="fsep">·</span> <span class="flag">--poll-draft</span><span class="plabel">草稿轮询级别</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / 0 / 1</span></div>
+  <div class="pdesc">草稿模型轮询级别</div>
+  <div class="pplain"><b>白话解说</b>高级项：草稿等待任务的轮询频率。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-cpu-mask-batch</span> <span class="fsep">·</span> <span class="flag">-Cbd</span><span class="palias">等价写法: --cpu-mask-batch-draft</span><span class="plabel">草稿批CPU掩码</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">草稿模型批处理 CPU 亲和掩码</div>
+  <div class="pplain"><b>白话解说</b>高级项：草稿批量处理用哪些核心。一般不用碰。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-cpu-strict-batch</span> <span class="fsep">·</span> <span class="flag">--cpu-strict-batch-draft</span><span class="plabel">草稿批严格绑定</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / 0 / 1</span></div>
+  <div class="pdesc">草稿模型批处理严格 CPU 绑定</div>
+  <div class="pplain"><b>白话解说</b>草稿批量处理时是否强制锁核心。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-prio-batch</span> <span class="fsep">·</span> <span class="flag">--prio-batch-draft</span><span class="plabel">草稿批优先级</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">草稿模型批处理线程优先级</div>
+  <div class="pplain"><b>白话解说</b>草稿批量处理的优先级。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-poll-batch</span> <span class="fsep">·</span> <span class="flag">--poll-batch-draft</span><span class="plabel">草稿批轮询</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / 0 / 1</span></div>
+  <div class="pdesc">草稿模型批处理轮询级别</div>
+  <div class="pplain"><b>白话解说</b>高级项：草稿批量处理的轮询频率。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-override-tensor</span> <span class="fsep">·</span> <span class="flag">-otd</span><span class="palias">等价写法: --override-tensor-draft</span><span class="plabel">草稿张量缓冲</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">草稿模型张量缓冲覆盖</div>
+  <div class="pplain"><b>白话解说</b>高级项：手动指定草稿模型某层放哪里。一般不用碰。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-cpu-moe</span> <span class="fsep">·</span> <span class="flag">-cmoed</span><span class="palias">等价写法: --cpu-moe-draft</span><span class="plabel">草稿MoE留CPU</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">草稿模型 MoE 权重保留在 CPU</div>
+  <div class="pplain"><b>白话解说</b>把草稿模型的 MoE 权重放内存，省显存。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-n-cpu-moe</span> <span class="fsep">·</span> <span class="flag">-ncmoed</span><span class="palias">等价写法: --n-cpu-moe-draft · --spec-draft-ncmoe</span><span class="plabel">草稿MoE层留CPU</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">草稿模型前 N 层 MoE 保留在 CPU</div>
+  <div class="pplain"><b>白话解说</b>把草稿模型前 N 层的 MoE 权重放内存，省显存。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-backend-sampling</span><span class="palias">等价写法: --no-spec-draft-backend-sampling</span><span class="plabel">草稿后端采样</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">将草稿采样卸载到后端</div>
+  <div class="pplain"><b>白话解说</b>把草稿模型的选词计算交给后端。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-sampling</span><span class="plabel">草稿采样方式</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / greedy / probabilistic</span></div>
+  <div class="pdesc">草稿模型如何采样: greedy 取 argmax; probabilistic 按概率抽样, 再由目标模型拒绝采样校验 (默认 greedy)</div>
+  <div class="pplain"><b>白话解说</b>草稿模型怎么选词：greedy = 总选最可能的（稳），probabilistic = 带随机（更活）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-type-k</span> <span class="fsep">·</span> <span class="flag">-ctkd</span><span class="palias">等价写法: --cache-type-k-draft</span><span class="plabel">草稿KV-K类型</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: f16</span><span class="badge choice">可选值: f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1</span></div>
+  <div class="pdesc">草稿模型 KV cache K 类型</div>
+  <div class="pplain"><b>白话解说</b>草稿模型的缓存 K 用什么精度。想省显存就选 q8_0。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-draft-type-v</span> <span class="fsep">·</span> <span class="flag">-ctvd</span><span class="palias">等价写法: --cache-type-v-draft</span><span class="plabel">草稿KV-V类型</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: f16</span><span class="badge choice">可选值: f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1</span></div>
+  <div class="pdesc">草稿模型 KV cache V 类型</div>
+  <div class="pplain"><b>白话解说</b>草稿模型的缓存 V 用什么精度。想省显存就选 q8_0。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-mod-n-min</span><span class="plabel">ngram-mod最小</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 48</span></div>
+  <div class="pdesc">ngram-mod 最少使用的 ngram token 数</div>
+  <div class="pplain"><b>白话解说</b>高级项：ngram 预测最少用几个历史字。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-mod-n-max</span><span class="plabel">ngram-mod最大</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 64</span></div>
+  <div class="pdesc">ngram-mod 最多使用的 ngram token 数</div>
+  <div class="pplain"><b>白话解说</b>高级项：ngram 预测最多用几个历史字。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-mod-n-match</span><span class="plabel">ngram-mod查找长度</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 24</span></div>
+  <div class="pdesc">ngram-mod 查找长度</div>
+  <div class="pplain"><b>白话解说</b>高级项：去历史里找重复片段时看的长度。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-simple-size-n</span><span class="plabel">ngram-simple-N</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 12</span></div>
+  <div class="pdesc">ngram-simple 查找 n-gram 长度</div>
+  <div class="pplain"><b>白话解说</b>高级项：用 N 个连续字去历史里找重复。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-simple-size-m</span><span class="plabel">ngram-simple-M</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 48</span></div>
+  <div class="pdesc">ngram-simple 草稿 m-gram 长度</div>
+  <div class="pplain"><b>白话解说</b>高级项：找到后一口气预写 M 个字。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-simple-min-hits</span><span class="plabel">ngram-simple最小命中</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 1</span></div>
+  <div class="pdesc">ngram-simple 最小命中次数</div>
+  <div class="pplain"><b>白话解说</b>高级项：同一段内容至少出现过几次才敢拿来预测。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-map-k-size-n</span><span class="plabel">ngram-map-k-N</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 12</span></div>
+  <div class="pdesc">ngram-map-k 查找 n-gram 长度</div>
+  <div class="pplain"><b>白话解说</b>高级项：用 N 个连续字查找重复（map-k 变体）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-map-k-size-m</span><span class="plabel">ngram-map-k-M</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 48</span></div>
+  <div class="pdesc">ngram-map-k 草稿 m-gram 长度</div>
+  <div class="pplain"><b>白话解说</b>高级项：找到后预写 M 个字（map-k 变体）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-map-k-min-hits</span><span class="plabel">ngram-map-k最小命中</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 1</span></div>
+  <div class="pdesc">ngram-map-k 最小命中次数</div>
+  <div class="pplain"><b>白话解说</b>高级项：至少命中几次才用（map-k 变体）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-map-k4v-size-n</span><span class="plabel">ngram-map-k4v-N</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 12</span></div>
+  <div class="pdesc">ngram-map-k4v 查找 n-gram 长度</div>
+  <div class="pplain"><b>白话解说</b>高级项：用 N 个连续字查找重复（map-k4v 变体）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-map-k4v-size-m</span><span class="plabel">ngram-map-k4v-M</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 48</span></div>
+  <div class="pdesc">ngram-map-k4v 草稿 m-gram 长度</div>
+  <div class="pplain"><b>白话解说</b>高级项：找到后预写 M 个字（map-k4v 变体）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-ngram-map-k4v-min-hits</span><span class="plabel">ngram-map-k4v最小命中</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 1</span></div>
+  <div class="pdesc">ngram-map-k4v 最小命中次数</div>
+  <div class="pplain"><b>白话解说</b>高级项：至少命中几次才用（map-k4v 变体）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--lookup-cache-static</span> <span class="fsep">·</span> <span class="flag">-lcs</span><span class="plabel">静态查找缓存</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">用于查找解码的静态缓存文件</div>
+  <div class="pplain"><b>白话解说</b>高级项：用一个预生成的查找缓存文件加速。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--lookup-cache-dynamic</span> <span class="fsep">·</span> <span class="flag">-lcd</span><span class="plabel">动态查找缓存</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">用于查找解码的动态缓存文件</div>
+  <div class="pplain"><b>白话解说</b>高级项：用一个动态维护的查找缓存加速。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--spec-default</span><span class="plabel">默认投机配置</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">启用内置的默认投机解码配置</div>
+  <div class="pplain"><b>白话解说</b>直接启用内置的推荐投机配置，一键加速，省心。</div>
+</div>
+</div>
+<div class="param-group" id="pgrp-multimodal">
+  <h3>多模态（Multimodal · 11 项）</h3>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mmproj</span> <span class="fsep">·</span> <span class="flag">-mm</span><span class="plabel">多模态投影</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">多模态投影文件路径</div>
+  <div class="pplain"><b>白话解说</b>让文字模型“看得懂图”的转接头文件。加载视觉模型时才用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mmproj-url</span> <span class="fsep">·</span> <span class="flag">-mmu</span><span class="plabel">投影下载地址</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">多模态投影文件的下载 URL</div>
+  <div class="pplain"><b>白话解说</b>直接填网址，让程序下载上面那个视觉转接头。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mmproj-auto</span><span class="palias">等价写法: --no-mmproj-auto · --no-mmproj</span><span class="plabel">自动投影</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">是否自动使用投影文件 (用 -hf 时自动下载投影; --no-mmproj 为等价关闭写法)</div>
+  <div class="pplain"><b>白话解说</b>是否自动下载配套的视觉转接头。默认自动，--no-mmproj 可关闭。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mmproj-offload</span><span class="palias">等价写法: --no-mmproj-offload</span><span class="plabel">投影GPU卸载</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">多模态投影是否启用 GPU 卸载</div>
+  <div class="pplain"><b>白话解说</b>是否把视觉转接头放到显卡（更快但更占显存）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mmproj-device</span> <span class="fsep">·</span> <span class="flag">-mmdev</span><span class="plabel">投影设备</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">多模态投影使用的设备 (none=不卸载, 默认跟随 --device)</div>
+  <div class="pplain"><b>白话解说</b>指定转接头放显卡还是内存，默认跟主模型。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--image-min-tokens</span><span class="plabel">图像最小Token</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">每张图最少 token 数 (0=从模型读取)</div>
+  <div class="pplain"><b>白话解说</b>每张图片最少换算成多少个“字”来处理。0 = 用模型默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--image-max-tokens</span><span class="plabel">图像最大Token</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">每张图最多 token 数 (0=从模型读取)</div>
+  <div class="pplain"><b>白话解说</b>每张图片最多换算成多少个字。0 = 用模型默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mtmd-batch-max-tokens</span><span class="plabel">图像批Token上限</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 1024</span></div>
+  <div class="pdesc">编码图像时每批最大图像 token 数</div>
+  <div class="pplain"><b>白话解说</b>处理图片时每批最多算多少字，影响速度和显存。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--video-fps</span><span class="plabel">视频帧率</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 4.0</span></div>
+  <div class="pdesc">目标视频帧率</div>
+  <div class="pplain"><b>白话解说</b>模型理解视频时每秒抽几帧画面。默认 4，越高看得越细但也越耗资源。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--video-timestamp-interval</span><span class="plabel">视频时间戳间隔</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 5000</span></div>
+  <div class="pdesc">文本时间戳间隔(毫秒)</div>
+  <div class="pplain"><b>白话解说</b>输出文字里的时间戳每隔几毫秒标一次。默认 5000。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--video-ffmpeg-dir</span><span class="plabel">ffmpeg目录</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">含 ffmpeg/ffprobe 的目录</div>
+  <div class="pplain"><b>白话解说</b>指定 ffmpeg 程序所在目录（处理视频需要它）。一般已内置。</div>
+</div>
+</div>
+<div class="param-group" id="pgrp-logging">
+  <h3>日志（Logging · 10 项）</h3>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--log-disable</span><span class="plabel">禁用日志</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">完全禁用日志输出</div>
+  <div class="pplain"><b>白话解说</b>让程序闭嘴，什么都不打印。想画面干净时用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--log-file</span><span class="plabel">日志文件</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">将日志写入文件</div>
+  <div class="pplain"><b>白话解说</b>把运行日志存到文件里，方便排查问题。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--log-jsonl</span><span class="palias">等价写法: --no-log-jsonl</span><span class="plabel">JSONL日志</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">以 JSONL 格式输出日志(禁用彩色)</div>
+  <div class="pplain"><b>白话解说</b>用机器能读的 JSON 格式记日志（方便程序处理，但就没彩色了）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--log-colors</span><span class="plabel">彩色日志</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / on / off / auto</span></div>
+  <div class="pdesc">彩色日志输出方式</div>
+  <div class="pplain"><b>白话解说</b>日志要不要带颜色区分。auto = 自动（终端支持就显示）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--verbose</span> <span class="fsep">·</span> <span class="flag">-v</span><span class="palias">等价写法: --log-verbose</span><span class="plabel">详细日志</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">输出全部日志(调试用)</div>
+  <div class="pplain"><b>白话解说</b>事无巨细全部打印出来，排查问题时用，平时别开。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--verbosity</span> <span class="fsep">·</span> <span class="flag">-lv</span><span class="palias">等价写法: --log-verbosity</span><span class="plabel">日志级别</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 3</span></div>
+  <div class="pdesc">0=通用,1=错误,2=警告,3=信息,4=跟踪,5=调试</div>
+  <div class="pplain"><b>白话解说</b>日志的详略程度：3 = 正常信息，5 = 最细（调试），0 = 最简。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--log-prefix</span><span class="palias">等价写法: --no-log-prefix</span><span class="plabel">日志前缀</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">日志消息是否带前缀</div>
+  <div class="pplain"><b>白话解说</b>每行日志要不要加一个前缀标记。默认随设置。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--log-timestamps</span><span class="palias">等价写法: --no-log-timestamps</span><span class="plabel">日志时间戳</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">日志消息是否带时间戳</div>
+  <div class="pplain"><b>白话解说</b>每行日志要不要带时间，方便按时间排查。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--log-prompts-dir</span><span class="plabel">提示词日志目录</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">将提示词记录到目录(调试用)</div>
+  <div class="pplain"><b>白话解说</b>把每次收到的提问存到一个文件夹（调试用），平时别开。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--offline</span><span class="plabel">离线模式</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">强制使用缓存, 禁止网络访问</div>
+  <div class="pplain"><b>白话解说</b>强制断网运行，只用本地缓存，防止偷偷联网下载。</div>
+</div>
+</div>
+<div class="param-group" id="pgrp-advanced">
+  <h3>高级（Advanced · 28 项）</h3>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--cache-list</span> <span class="fsep">·</span> <span class="flag">-cl</span><span class="plabel">缓存模型清单</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">列出本地模型缓存中的模型清单(打印后直接退出, 不启动服务)</div>
+  <div class="pplain"><b>白话解说</b>打印出本地缓存了哪些模型，然后直接退出（不启动服务）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--completion-bash</span><span class="plabel">Bash补全脚本</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">输出可直接 source 的 bash 补全脚本(不启动服务)</div>
+  <div class="pplain"><b>白话解说</b>生成一段命令行补全脚本（方便打字），生成后退出。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--rope-scaling</span><span class="plabel">RoPE缩放</span></div>
+  <div class="pmeta"><span class="badge type">枚举</span><span class="badge default">默认: (空)</span><span class="badge choice">可选值: (空) / none / linear / yarn</span></div>
+  <div class="pdesc">RoPE 频率缩放方法 (未指定时模型默认 linear)</div>
+  <div class="pplain"><b>白话解说</b>高级项：长上下文时位置编码的缩放方法。不懂别动，默认 linear。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--rope-scale</span><span class="plabel">RoPE缩放因子</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 1.0</span></div>
+  <div class="pdesc">RoPE 上下文缩放因子</div>
+  <div class="pplain"><b>白话解说</b>高级项：把上下文按多少倍扩展，配合上面使用。一般不用改。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--rope-freq-base</span><span class="plabel">RoPE基频</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">RoPE 基础频率 (0=从模型加载)</div>
+  <div class="pplain"><b>白话解说</b>高级项：位置编码的基础频率。0 = 用模型自带。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--rope-freq-scale</span><span class="plabel">RoPE频率缩放</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">RoPE 频率缩放因子 (0=不设置)</div>
+  <div class="pplain"><b>白话解说</b>高级项：位置编码的频率缩放。0 = 不设置。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--yarn-orig-ctx</span><span class="plabel">YaRN原始上下文</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 0</span></div>
+  <div class="pdesc">YaRN: 模型原始上下文大小</div>
+  <div class="pplain"><b>白话解说</b>高级项：扩展长上下文前，模型原始的上下文长度（YaRN 需要）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--yarn-ext-factor</span><span class="plabel">YaRN外推因子</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: -1.0</span></div>
+  <div class="pdesc">YaRN: 外推混合因子 (0.0=完全插值)</div>
+  <div class="pplain"><b>白话解说</b>高级项：YaRN 扩展时外推/插值的混合比例。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--yarn-attn-factor</span><span class="plabel">YaRN注意力因子</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: -1.0</span></div>
+  <div class="pdesc">YaRN: 缩放 sqrt(t) 或注意力幅度</div>
+  <div class="pplain"><b>白话解说</b>高级项：YaRN 扩展时对注意力的缩放。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--yarn-beta-slow</span><span class="plabel">YaRN beta-slow</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: -1.0</span></div>
+  <div class="pdesc">YaRN: 高修正维度或 alpha</div>
+  <div class="pplain"><b>白话解说</b>高级项：YaRN 的高频修正参数。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--yarn-beta-fast</span><span class="plabel">YaRN beta-fast</span></div>
+  <div class="pmeta"><span class="badge type">小数</span><span class="badge default">默认: -1.0</span></div>
+  <div class="pdesc">YaRN: 低修正维度或 beta</div>
+  <div class="pplain"><b>白话解说</b>高级项：YaRN 的低频修正参数。一般默认。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--lora</span><span class="plabel">LoRA适配器</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">LoRA 适配器路径, 逗号分隔多个</div>
+  <div class="pplain"><b>白话解说</b>加载一个“小补丁”（LoRA 微调模型），改变模型风格或能力。多个用逗号隔开。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--lora-scaled</span><span class="plabel">LoRA缩放</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">FNAME:SCALE 形式, 逗号分隔多个</div>
+  <div class="pplain"><b>白话解说</b>加载 LoRA 并指定作用强度，例如“文件:1.0”。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--lora-init-without-apply</span><span class="plabel">LoRA仅加载</span></div>
+  <div class="pmeta"><span class="badge type">开关</span><span class="badge default">默认: false</span></div>
+  <div class="pdesc">只加载 LoRA 不应用, 稍后通过 API 应用</div>
+  <div class="pplain"><b>白话解说</b>先把 LoRA 加载进来但不生效，稍后再通过接口启用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--control-vector</span><span class="plabel">控制向量</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">控制向量文件, 逗号分隔多个</div>
+  <div class="pplain"><b>白话解说</b>加载一个控制向量（另一种轻量调教），控制模型某个方向。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--control-vector-scaled</span><span class="plabel">控制向量缩放</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">FNAME:SCALE 形式, 逗号分隔多个</div>
+  <div class="pplain"><b>白话解说</b>加载控制向量并指定强度，例如“文件:1.0”。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--control-vector-layer-range</span><span class="plabel">控制向量层范围</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">START END, 含首尾</div>
+  <div class="pplain"><b>白话解说</b>高级项：控制向量作用在模型的第几层到第几层。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--models-dir</span><span class="plabel">路由模型目录</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">路由服务器的模型目录</div>
+  <div class="pplain"><b>白话解说</b>指定路由模式（多模型自动切换）下，模型放在哪个文件夹。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--models-preset</span><span class="plabel">路由预设文件</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">路由服务器的模型预设 INI 文件</div>
+  <div class="pplain"><b>白话解说</b>用 INI 配置文件定义路由服务器的模型预设。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--models-max</span><span class="plabel">路由最大模型数</span></div>
+  <div class="pmeta"><span class="badge type">整数</span><span class="badge default">默认: 4</span></div>
+  <div class="pdesc">路由服务器同时加载的最大模型数 (0=不限)</div>
+  <div class="pplain"><b>白话解说</b>路由模式下最多同时加载几个模型。0 = 不限。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--models-autoload</span><span class="palias">等价写法: --no-models-autoload</span><span class="plabel">路由自动加载</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">路由服务器是否自动加载模型</div>
+  <div class="pplain"><b>白话解说</b>路由模式下是否自动把模型加载进来。默认随设置。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--ui-mcp-proxy</span><span class="palias">等价写法: --no-ui-mcp-proxy · --webui-mcp-proxy · --no-webui-mcp-proxy</span><span class="plabel">MCP代理</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">启用 MCP CORS 代理(实验性, 勿在不可信环境使用)</div>
+  <div class="pplain"><b>白话解说</b>实验功能：让网页界面通过一个代理访问外部工具。有安全风险，非可信环境别开。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--tools</span><span class="plabel">内置工具</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">启用内置工具, 逗号分隔; all 表示全部 (read_file/write_file/edit_file/file_glob_search/grep_search/exec_shell_command/get_info); 出于安全默认将 CORS 限制为 localhost</div>
+  <div class="pplain"><b>白话解说</b>允许模型调用电脑工具（读写文件、搜索、执行命令等）。非常强大，默认只允许本机网页使用。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--tools-runtime</span><span class="plabel">工具运行环境</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">docker:/podman:/ssh: 形式, 默认宿主机</div>
+  <div class="pplain"><b>白话解说</b>让上面的工具在 Docker 等隔离环境里运行，更安全。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mcp-servers-config</span><span class="plabel">MCP服务配置</span></div>
+  <div class="pmeta"><span class="badge type">路径</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">MCP 服务器定义 JSON 文件(实验性)</div>
+  <div class="pplain"><b>白话解说</b>用一个 JSON 文件配置外部工具服务器（实验功能）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--mcp-servers-json</span><span class="plabel">MCP服务JSON</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">内联 MCP 服务器定义 JSON(实验性)</div>
+  <div class="pplain"><b>白话解说</b>直接把 MCP 服务器配置写成 JSON 填进来（实验功能）。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag">--agent</span> <span class="fsep">·</span> <span class="flag">-ag</span><span class="palias">等价写法: --no-agent</span><span class="plabel">智能体模式</span></div>
+  <div class="pmeta"><span class="badge type">开关(三态)</span><span class="badge default">默认: 未设置</span></div>
+  <div class="pdesc">启用 CORS 代理与全部内置工具(实验性)</div>
+  <div class="pplain"><b>白话解说</b>实验功能：一键打开全部工具和代理，让模型能自己动手干活。有风险，谨慎开启。</div>
+</div>
+<div class="pcard">
+  <div class="pflag"><span class="flag"></span><span class="plabel">额外参数</span></div>
+  <div class="pmeta"><span class="badge type">字符串</span><span class="badge default">默认: (空)</span></div>
+  <div class="pdesc">自由格式的额外命令行参数</div>
+  <div class="pplain"><b>白话解说</b>兜底入口：把你想要的其它任何命令行参数直接填在这里。</div>
+</div>
+</div>
+<p class="gen-note">共收录 252 个参数。数值范围未逐一注明的，以 <code>llama-server --help</code> 输出为准。</p>
+<!-- PARAMS:END -->
+  </section>
+</section>
+
+<!-- ═══════════════ 第三章 ═══════════════ -->
+<section class="chapter" id="s3">
+  <h2 class="chap">第三章 · 常见需求的解决办法<span class="en">How-To Recipes</span></h2>
+  <p>按"你想要什么"组织的实用配方，每个都给出可直接在参数面板里填写的参数组合。开始前建议先读 <a href="#s2-0">2.0 入门概念</a> 理解基本原理。</p>
+
+  <section class="sub" id="s3-1">
+    <h3><span class="no">3.1</span>加大上下文并保留精度（长文本/长对话）</h3>
+    <p><strong>需求</strong>：想让模型一次读更多内容（长文档、长篇小说、多轮长对话），但显存不允许直接把 <code>--ctx-size</code> 拉满。</p>
+    <p><strong>背景</strong>：上下文的显存开销主要来自 <strong>KV 缓存</strong>——它默认以 f16 精度保存，随上下文长度线性增长，长上下文时甚至比模型本身还占显存。所以省显存的正确姿势不是降模型精度，而是<strong>降缓存精度</strong>。</p>
+    <table>
+      <tr><th>参数</th><th>推荐值</th><th>作用</th></tr>
+      <tr><td><code>--ctx-size</code>（<code>-c</code>）</td><td>按需，如 32768 / 65536</td><td>上下文长度。按实际需要设置，不要"以防万一"白留显存。</td></tr>
+      <tr><td><code>--flash-attn</code></td><td><code>on</code>（新版默认 auto）</td><td>Flash Attention：降低注意力计算与显存开销，且是 KV 量化的<strong>前提</strong>。老显卡（GTX 10 系等）不支持时去掉。</td></tr>
+      <tr><td><code>--cache-type-k</code></td><td><code>q8_0</code></td><td>K 缓存量化为 8bit，缓存体积减半，质量损失实际可忽略，是公认的"免费午餐"。</td></tr>
+      <tr><td><code>--cache-type-v</code></td><td><code>q8_0</code></td><td>V 缓存同上；必须与 Flash Attention 同时开启。</td></tr>
+    </table>
+    <div class="tip">💡 <strong>标准组合</strong>：<code>--ctx-size 65536 --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0</code>。显存仍不够时，可把缓存再降到 <code>q4_0</code>（再省约一半，但长文本下质量损失开始可测）；还可以用 <code>--fit</code>（默认 on）让程序自动调整参数适配显存。实测参考：32GB 显卡上 128K 上下文，f16 缓存约需 12GB，q8_0 量化后约 6GB——不量化基本装不下。</div>
+    <div class="warn">⚠️ 若长提示时首字特别慢甚至 OOM：多半是 KV 缓存装不下或没开 Flash Attention（无 FA 时预填计算量随长度平方增长）。按上表组合设置即可；确实不需要超长上下文时，把 <code>-c</code> 降回来才是最直接的解药。</div>
+  </section>
+
+  <section class="sub" id="s3-2">
+    <h3><span class="no">3.2</span>运行超出显存的更大模型</h3>
+    <p><strong>需求</strong>：模型文件太大，显存装不下整只，但又不想完全跑 CPU。</p>
+    <h4>思路一：换更低量化等级</h4>
+    <p>同等参数量下 Q4_K_M → Q3_K_M / IQ4 体积再降约 20%~30%。优先降量化而不是砍层数——量化均匀作用于全部权重，而部分卸载会让一半权重走慢速内存。</p>
+    <h4>思路二：MoE 模型 —— 专家留 CPU（强烈推荐）</h4>
+    <p>DeepSeek、Qwen3-MoE、GLM、Kimi 等<strong>混合专家（MoE）</strong>模型的每个 token 只激活少部分专家权重，把"大多数时间闲置"的专家权重留在内存、注意力层留在显卡，能在小显存上跑动超大模型且速度可观：</p>
+    <table>
+      <tr><th>参数</th><th>用法</th></tr>
+      <tr><td><code>--cpu-moe</code></td><td>全部专家权重留 CPU。最简单的"先让它跑起来"，显存占用最小。</td></tr>
+      <tr><td><code>--n-cpu-moe N</code></td><td>只有前 N 层的专家留 CPU（N 越小越吃显存、越快）。<strong>调法</strong>：先 <code>--cpu-moe</code> 确认能加载，再换 <code>--n-cpu-moe</code> 从大往小试（如 40 → 30 → 26…），直到 OOM 后退一档。</td></tr>
+      <tr><td><code>--override-tensor</code></td><td>更细粒度：用正则指定哪些张量留 CPU，如 <code>".ffn_.*_exps.=CPU"</code>（等价于全专家留 CPU）。进阶玩法。</td></tr>
+      <tr><td><code>-ngl</code></td><td>与上面配合，保持 <code>999</code>/<code>auto</code>，让注意力层尽量进显卡。</td></tr>
+    </table>
+    <div class="tip">💡 经验参考：41GB 的 MoE 模型在 24GB 显存上约 <code>--n-cpu-moe 26</code>，16GB 显存约 36。此时瓶颈变成<strong>内存带宽</strong>——DDR5 双通道比 DDR4 明显更快，生成速度通常仍能有 20~40 tok/s。</div>
+    <h4>思路三：稠密模型 —— 部分 FFN 层留 CPU</h4>
+    <p>非 MoE 模型可用 <code>--override-tensor</code> 把指定层的 FFN 张量挪到 CPU，而注意力与 KV 缓存保持在显卡：<code>-ngl 999 --override-tensor "blk\\.(0|1|2|3)\\.ffn_.*=CPU"</code>（把第 0~3 层的 FFN 留在 CPU，层数按显存试出来）。逐层往显卡搬，搬不动为止。</p>
+    <h4>思路四：多显卡</h4>
+    <p><code>--split-mode layer</code>（默认）按层分给多卡；<code>--tensor-split 3,1</code> 按 3:1 比例分配显存占用；<code>-sm row</code> 按行切分（需要卡间高速互联，配合 Flash Attention）。</p>
+  </section>
+
+  <section class="sub" id="s3-3">
+    <h3><span class="no">3.3</span>提升生成与首字速度</h3>
+    <p>按收益从大到小逐项检查：</p>
+    <ol>
+      <li><strong>确认模型全进显卡</strong>：<code>-ngl 999</code> 或 <code>auto</code>。哪怕只留几层在 CPU，速度也会明显掉。看监控条确认显存装得下。</li>
+      <li><strong>开 Flash Attention</strong>：<code>--flash-attn on</code>（RTX 30 系及以后支持良好，约提速 15%~20%；不支持会启动报错，删掉即可）。</li>
+      <li><strong>别白留上下文</strong>：生成速度随上下文增长而下降（每生成一个 token 都要读全部 KV 缓存）。50 tok/s @1K 掉到 10 tok/s @64K 是正常现象，不是 bug——不需要就把 <code>-c</code> 调小。</li>
+      <li><strong>CPU 线程数</strong>：有层在 CPU 时，<code>-t</code> 设为物理核心数（不含超线程）。</li>
+      <li><strong>批大小</strong>：喂长提示词慢时加大 <code>-ub</code>（如 1024）；显存紧张时减小。</li>
+      <li><strong>量化缓存</strong>：<code>--cache-type-k/v q8_0</code> 同时减少每步读取量，对长上下文提速也有帮助。</li>
+    </ol>
+    <div class="tip">💡 想量化对比效果，可以在命令行用 <code>llama-bench</code>（pp 行=首字延迟，tg 行=生成速度）做前后对照；GUI 里则直接看监控条与体感。</div>
+  </section>
+
+  <section class="sub" id="s3-4">
+    <h3><span class="no">3.4</span>多人/多任务同时使用</h3>
+    <p><strong>需求</strong>：几个应用（或几个人）同时调用同一个服务。</p>
+    <table>
+      <tr><th>参数</th><th>推荐值</th><th>说明</th></tr>
+      <tr><td><code>--parallel</code>（<code>-np</code>）</td><td>2~4</td><td>并行槽位数。上下文会被<strong>均分</strong>：总上下文 32k、4 槽位 = 每请求 8k。显存相应增加。</td></tr>
+      <tr><td><code>-c</code></td><td>总上下文</td><td>记得按"单请求需要 × 槽位数"设置总量。</td></tr>
+      <tr><td><code>--cont-batching</code></td><td>默认开启</td><td>连续批处理，多请求自动合并计算，一般不用动（关掉用 <code>--no-cont-batching</code>）。</td></tr>
+    </table>
+    <div class="tip">💡 实测参考：单卡从 1 并发开到 4~8 并发，总吞吐能翻 3~5 倍，单请求延迟只增加几毫秒；并发开到显存吃满后延迟翻倍，就得不偿失了。<strong>4~8 是甜区</strong>。单人使用保持 1，把全部上下文留给一个请求。</div>
+  </section>
+
+  <section class="sub" id="s3-5">
+    <h3><span class="no">3.5</span>接入第三方软件（OpenAI 兼容 API）</h3>
+    <p>llama-server 内置 <strong>OpenAI 兼容接口</strong>：启动模型后，任何支持"OpenAI API 格式"的软件（翻译插件、写作工具、代码助手、沉浸式翻译、SillyTavern 等）都能直连：</p>
+    <table>
+      <tr><th>参数</th><th>推荐值</th><th>说明</th></tr>
+      <tr><td><code>--host</code></td><td>本机用默认 <code>127.0.0.1</code>；局域网其他设备访问改 <code>0.0.0.0</code></td><td>监听地址。</td></tr>
+      <tr><td><code>--port</code></td><td>默认 <code>8080</code></td><td>端口，冲突时换一个。</td></tr>
+      <tr><td><code>--api-key</code></td><td>对外服务时设置</td><td>简单鉴权，多个用逗号分隔。</td></tr>
+      <tr><td><code>--alias</code></td><td>如 <code>my-model</code></td><td>对外的模型名，第三方软件里就填这个名字（默认是完整文件路径，很多软件会显示不友好）。</td></tr>
+    </table>
+    <p>第三方软件里填写：<code>API Base</code> = <code>http://127.0.0.1:8080/v1</code>，<code>Model</code> = 你设置的别名（未设置则填模型文件名），Key 随意或填设置的密钥。</p>
+    <div class="tip">💡 浏览器直接访问 <code>http://127.0.0.1:8080</code> 就是内置 WebUI（状态栏「网页运行」按钮同款），可以先用它验证服务是否正常。</div>
+  </section>
+
+  <section class="sub" id="s3-6">
+    <h3><span class="no">3.6</span>输出乱码 / 重复 / 模板异常</h3>
+    <p><strong>症状</strong>：回复前言不搭后语、满屏重复、或出现奇怪的括号标签（如 <code>&lt;|im_start|&gt;</code> 原样输出）。</p>
+    <ul>
+      <li><strong>对话模板不对</strong>：GGUF 内置了模板，但个别微调模型没写对。在「模型/服务器」相关分组里用 <code>--chat-template</code> 手动指定（如 <code>chatml</code>、<code>qwen</code> 等预设名），或加 <code>--jinja</code> 改用模型自带的 Jinja 模板（更接近官方行为）。</li>
+      <li><strong>温度太低/太高</strong>：复读机式的死循环重复，试着升一点 <code>--temp</code>、加 <code>--repeat-penalty</code>（默认 1.0，设 1.1 左右抑制重复）。</li>
+      <li><strong>上下文溢出</strong>：对话太长超出 <code>-c</code>，早期内容被截断导致"失忆"。加大上下文（见 <a href="#s3-1">3.1</a>）或开新对话。</li>
+      <li><strong>量化太狠</strong>：Q2/Q3 量化的小参数模型本来就语无伦次，换 Q4_K_M 以上再判断是不是参数问题。</li>
+    </ul>
+  </section>
+
+  <section class="sub" id="s3-7">
+    <h3><span class="no">3.7</span>显存不足（OOM）排查速查</h3>
+    <p>按顺序做，每做一步重试加载：</p>
+    <ol>
+      <li>调小上下文 <code>-c</code>（KV 缓存往往是显存大头）；</li>
+      <li>KV 缓存量化：<code>--flash-attn on --cache-type-k q8_0 --cache-type-v q8_0</code>（见 <a href="#s3-1">3.1</a>）；</li>
+      <li>MoE 模型：<code>--cpu-moe</code> 先跑起来，再逐步改 <code>--n-cpu-moe</code> 往回搬（见 <a href="#s3-2">3.2</a>）；</li>
+      <li>调小物理批 <code>-ub 256</code>（计算缓冲区变小）；</li>
+      <li>降低 GPU 层数 <code>-ngl</code>；</li>
+      <li>换更低量化等级的模型文件（Q4_K_M → Q3_K_M）或更小参数量的模型。</li>
+    </ol>
+    <div class="tip">💡 新版 llama.cpp 默认 <code>--fit on</code>，会自动帮你调整未设置的参数去适配显存——如果它自动调的结果不是你想要的（比如偷偷砍了上下文），显式把想要的参数都填上，或设 <code>--fit off</code> 完全自己掌控。</div>
+  </section>
+</section>
+
+</main>
+</div>
+
+<footer>
+  llama-shell 帮助中心 · 本页为纯静态页面，可部署至任意静态托管（如 EdgeOne Pages）·
+  程序内悬停提示始终与当前版本同步，本页内容可能略有滞后
+</footer>
+
+<script>
+/* ───────── 目录折叠: 有下级的条目前加 ▾/▸, 点击切换 ───────── */
+(function(){
+  function makeCollapsible(container, linkSelector){
+    var links = Array.prototype.slice.call(container.querySelectorAll(linkSelector));
+    if (!links.length) return;
+    var nodeOf = new Map();
+
+    // 1) 建树: 无 class=章(d0), lvl2=节(d1), lvl3=子项(d2)
+    var stack = [];
+    links.forEach(function(a){
+      var depth = a.classList.contains("lvl2") ? 1 :
+                  a.classList.contains("lvl3") ? 2 : 0;
+      while (stack.length && stack[stack.length-1].depth >= depth) stack.pop();
+      var node = { a:a, depth:depth, parent:null, children:[],
+                   collapsed:false, wrap:null, caret:null };
+      if (stack.length){
+        node.parent = stack[stack.length-1];
+        node.parent.children.push(node);
+      }
+      nodeOf.set(a, node);
+      stack.push(node);
+    });
+
+    function setCollapsed(node, v){
+      node.collapsed = v;
+      node.wrap.style.display = v ? "none" : "";
+      node.caret.textContent = v ? "▸" : "▾";
+      node.a.classList.toggle("toc-folded", v);
+    }
+
+    // 2) 自顶向下: 把子层 <a> 包进 .toc-kids, 并给有孩子的条目加箭头
+    // (防重入: build 会被父节点递归和顶层循环各调一次, 二次调用直接返回,
+    //  否则会重复插箭头、留空 wrap)
+    function build(node){
+      if (!node.children.length || node.wrap) return;
+      var wrap = document.createElement("div");
+      wrap.className = "toc-kids";
+      node.a.parentNode.insertBefore(wrap, node.a.nextSibling);
+      node.wrap = wrap;
+      node.children.forEach(function(c){
+        wrap.appendChild(c.a);
+        build(c);                       // c 的子层包建立在 c.a 之后(即本 wrap 内)
+        if (c.wrap) wrap.appendChild(c.wrap);
+      });
+      var caret = document.createElement("span");
+      caret.className = "toc-caret";
+      caret.textContent = "▾";
+      node.a.insertBefore(caret, node.a.firstChild);
+      node.caret = caret;
+      caret.addEventListener("click", function(e){
+        e.preventDefault(); e.stopPropagation();
+        setCollapsed(node, !node.collapsed);
+      });
+    }
+    links.forEach(function(a){ build(nodeOf.get(a)); });
+
+    // 3) 高亮联动: 高亮条目处于折叠内时自动展开祖先
+    window.__tocExpandHandlers = window.__tocExpandHandlers || [];
+    window.__tocExpandHandlers.push(function(a){
+      var n = nodeOf.get(a);
+      while (n && n.parent){
+        if (n.parent.collapsed) setCollapsed(n.parent, false);
+        n = n.parent;
+      }
+    });
+  }
+  var aside = document.querySelector("aside.toc");
+  if (aside) makeCollapsible(aside, "a[data-toc]");
+  var mob = document.querySelector("details.toc-mobile");
+  if (mob) makeCollapsible(mob, "a[href^='#']");
+})();
+
+(function(){
+  // 按滚动位置高亮目录: 始终指向"当前视口顶部所处"的章节,
+  // 即滚动位置上方最近的章节标题, 保证与右侧浏览位置一致。
+  var links = Array.prototype.slice.call(document.querySelectorAll("aside.toc a[data-toc]"));
+  var targets = links.map(function(a){
+    return document.getElementById(a.getAttribute("href").slice(1));
+  }).filter(Boolean);
+
+  var OFFSET = 90;   // 视口顶部以下 90px 内的标题算"正在浏览"
+  var ticking = false;
+
+  function update(){
+    ticking = false;
+    var y = window.scrollY + OFFSET;
+    var current = targets[0];
+    for (var i = 0; i < targets.length; i++){
+      if (targets[i].offsetTop <= y) current = targets[i];
+      else break;
+    }
+    // 滚动到底部时高亮最后一项(末尾章节较短时也能指到)
+    if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 4){
+      current = targets[targets.length - 1];
+    }
+    var id = current ? current.id : null;
+    var activeLink = null;
+    links.forEach(function(a){
+      var on = a.getAttribute("href") === "#" + id;
+      a.classList.toggle("active", on);
+      if (on) activeLink = a;
+    });
+    // 高亮的条目若在折叠的下级里, 自动展开其祖先
+    if (activeLink && window.__tocExpandHandlers){
+      window.__tocExpandHandlers.forEach(function(fn){ fn(activeLink); });
+    }
+  }
+
+  window.addEventListener("scroll", function(){
+    if (!ticking){ ticking = true; requestAnimationFrame(update); }
+  }, { passive: true });
+  window.addEventListener("resize", update);
+  window.addEventListener("load", update);
+  update();
+})();
+
+/* ───────── 页内搜索: 章节标题 + 全部参数卡片 ───────── */
+(function(){
+  var MAX = 30;
+  var index = [];
+
+  function buildIndex(){
+    // 章节 / 参数分组
+    document.querySelectorAll("main section[id]").forEach(function(sec){
+      var h = sec.querySelector("h2, h3");
+      if (!h) return;
+      index.push({
+        el: sec, type: "章节",
+        text: h.textContent.trim().replace(/\s+/g, " "), ctx: "",
+        hay: (h.textContent + " " + sec.id).toLowerCase()
+      });
+    });
+    // 参数卡片(全部 250+ 张)
+    document.querySelectorAll("main .pcard").forEach(function(card, i){
+      var flagEl = card.querySelector(".pflag");
+      var descEl = card.querySelector(".pdesc");
+      var group = card.closest(".param-group");
+      var gEl = group ? group.querySelector("h3") : null;
+      var title = flagEl ? flagEl.textContent.trim().replace(/\s+/g, " ")
+                         : ("参数 " + (i + 1));
+      var desc = descEl ? descEl.textContent.trim() : "";
+      var gname = gEl ? gEl.textContent.replace(/（.*$/, "").trim() : "";
+      index.push({
+        el: card, type: gname || "参数", isParam: true,
+        text: title, ctx: desc,
+        hay: (title + " " + desc + " " + gname).toLowerCase()
+      });
+    });
+  }
+
+  function search(q){
+    var res = [];
+    for (var i = 0; i < index.length && res.length < MAX; i++){
+      if (index[i].hay.indexOf(q) !== -1) res.push(index[i]);
+    }
+    return res;
+  }
+
+  function jump(item){
+    var el = item.el;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.remove("flash");
+    void el.offsetWidth;          // 重启动画
+    el.classList.add("flash");
+  }
+
+  function setup(inputId, resId){
+    var input = document.getElementById(inputId);
+    var box = document.getElementById(resId);
+    if (!input || !box) return;
+    var items = [];
+
+    function hide(){ box.style.display = "none"; box.innerHTML = ""; items = []; }
+
+    function show(q){
+      box.innerHTML = "";
+      items = search(q);
+      if (!items.length){
+        box.innerHTML = '<div class="sr-empty">没有匹配的章节或参数</div>';
+      } else {
+        items.forEach(function(it){
+          var d = document.createElement("div");
+          d.className = "sr-item" + (it.isParam ? " is-param" : "");
+          d.innerHTML = '<span class="sr-type"></span><span class="sr-text"></span>'
+            + (it.ctx ? '<span class="sr-ctx"></span>' : '');
+          d.querySelector(".sr-type").textContent = it.type;
+          d.querySelector(".sr-text").textContent = it.text;
+          if (it.ctx) d.querySelector(".sr-ctx").textContent = it.ctx;
+          d.addEventListener("mousedown", function(e){ e.preventDefault(); jump(it); });
+          box.appendChild(d);
+        });
+      }
+      box.style.display = "block";
+    }
+
+    input.addEventListener("input", function(){
+      var q = input.value.trim().toLowerCase();
+      if (!q){ hide(); return; }
+      show(q);
+    });
+    input.addEventListener("keydown", function(e){
+      if (e.key === "Enter" && items.length){ jump(items[0]); input.blur(); }
+      else if (e.key === "Escape"){ input.value = ""; hide(); }
+    });
+    document.addEventListener("click", function(e){
+      if (!box.contains(e.target) && e.target !== input) hide();
+    });
+  }
+
+  buildIndex();
+  setup("toc-search", "toc-results");
+  setup("toc-search-m", "toc-results-m");
+})();
+</script>
+</body>
+</html>
+<!-- （注：内容由AI生成） -->
