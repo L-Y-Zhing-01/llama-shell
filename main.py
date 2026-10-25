@@ -239,7 +239,7 @@ class App(ctk.CTk):
         cmd_frame = ctk.CTkFrame(self.right, height=100)
         cmd_frame.grid(row=3, column=0, sticky="ew", padx=2, pady=2)
         cmd_frame.grid_columnconfigure(0, weight=1)
-        cmd_frame.grid_rowconfigure(1, weight=1)
+        cmd_frame.grid_rowconfigure(2, weight=1)
 
         cmd_top = ctk.CTkFrame(cmd_frame, fg_color="transparent")
         cmd_top.grid(row=0, column=0, sticky="ew", padx=2)
@@ -248,8 +248,19 @@ class App(ctk.CTk):
         ctk.CTkButton(cmd_top, text="复制", width=60,
                       command=self.on_copy_command).grid(row=0, column=1, padx=4)
 
+        # 额外参数不是 llama.cpp 参数(无 --flag), 不进参数面板, 放在命令预览旁:
+        # 它直接影响命令末尾的拼接, 与预览放一起最直观。
+        extra_row = ctk.CTkFrame(cmd_frame, fg_color="transparent")
+        extra_row.grid(row=1, column=0, sticky="ew", padx=2)
+        extra_row.grid_columnconfigure(1, weight=1)
+        ctk.CTkLabel(extra_row, text="额外参数:", anchor="w").grid(row=0, column=0, padx=4, sticky="w")
+        self.extra_entry = ctk.CTkEntry(extra_row, placeholder_text="自由追加到命令末尾, 如: --verbose 1")
+        self.extra_entry.grid(row=0, column=1, sticky="ew", padx=4, pady=2)
+        self.extra_entry.bind("<Return>", lambda e: self._on_extra_args_changed())
+        self.extra_entry.bind("<FocusOut>", lambda e: self._on_extra_args_changed())
+
         self.cmd_textbox = ctk.CTkTextbox(cmd_frame, height=60, font=("Consolas", 11))
-        self.cmd_textbox.grid(row=1, column=0, sticky="nsew", padx=2, pady=2)
+        self.cmd_textbox.grid(row=2, column=0, sticky="nsew", padx=2, pady=2)
         self.cmd_textbox.insert("1.0", "请选择模型...")
         self.cmd_textbox.configure(state="disabled")
 
@@ -477,6 +488,8 @@ class App(ctk.CTk):
         model_cfg = self.models_cfg["models"].get(name, {})
         params = model_cfg.get("params", get_default_params())
         self.params_panel.load_params(params)
+        self.extra_entry.delete(0, "end")
+        self.extra_entry.insert(0, str(params.get("extra_args") or ""))
         self._refresh_command_preview()
         self._refresh_ctx_preset(params)
 
@@ -488,7 +501,7 @@ class App(ctk.CTk):
     def on_ctx_preset_changed(self, value: str):
         if value == CUSTOM_CTX_LABEL:
             # 显示回当前实际值, 再弹出自定义对话框
-            self._refresh_ctx_preset(self.params_panel.collect_params())
+            self._refresh_ctx_preset(self._collect_params())
             self._open_custom_ctx_dialog()
             return
         # 解析 "32k (32768)" 格式
@@ -560,12 +573,21 @@ class App(ctk.CTk):
                       if p["value"] == ctx), None)
         self.ctx_preset_combo.set(match or f"自定义 ({ctx})")
 
+    def _collect_params(self) -> dict:
+        """面板参数 + 额外参数(extra_args 不是 llama.cpp 参数, 由预览区输入框提供)"""
+        return {**self.params_panel.collect_params(),
+                "extra_args": self.extra_entry.get().strip()}
+
+    def _on_extra_args_changed(self):
+        self._refresh_command_preview()
+        self.on_save_params()
+
     def _on_params_changed(self):
         self._refresh_command_preview()
-        self._refresh_ctx_preset(self.params_panel.collect_params())
+        self._refresh_ctx_preset(self._collect_params())
 
     def _current_command(self) -> str:
-        return build_command_string(self.params_panel.collect_params(), self.llama_cmd)
+        return build_command_string(self._collect_params(), self.llama_cmd)
 
     def _refresh_command_preview(self):
         if not self.selected_model:
@@ -585,7 +607,7 @@ class App(ctk.CTk):
         if not self.selected_model:
             return
 
-        params = self.params_panel.collect_params()
+        params = self._collect_params()
         argv = build_argv(params, self.llama_cmd)
 
         # 保存参数
@@ -637,7 +659,7 @@ class App(ctk.CTk):
     def on_save_params(self):
         if not self.selected_model:
             return
-        self.models_cfg["models"][self.selected_model]["params"] = self.params_panel.collect_params()
+        self.models_cfg["models"][self.selected_model]["params"] = self._collect_params()
         save_models_config(self.models_cfg)
         self._set_status("参数已保存")
 
@@ -659,6 +681,8 @@ class App(ctk.CTk):
         self.models_cfg["models"][self.selected_model]["params"] = params
         save_models_config(self.models_cfg)
         self.params_panel.load_params(params)
+        self.extra_entry.delete(0, "end")
+        self.extra_entry.insert(0, str(params.get("extra_args") or ""))
         self._refresh_command_preview()
         self._refresh_ctx_preset(params)
         self._set_status("已重置为原始参数")
@@ -677,7 +701,7 @@ class App(ctk.CTk):
         if self.server.is_running():
             host, port = self.server.get_host_port()
         else:
-            params = self.params_panel.collect_params() if self.selected_model else {}
+            params = self._collect_params() if self.selected_model else {}
             host = params.get("host") or "127.0.0.1"
             port = params.get("port") or 8080
         url = f"http://{host}:{port}"

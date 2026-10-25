@@ -11,6 +11,8 @@
   说明文字里提到的参数名(如 --n-ubatch)和小数点被截断的残片(如 --fim-qwen-1)当成新参数。
 - 参数入口用 --fim-qwen-1.5b-default 这种带 '.' 的名字, 正则字符集里必须包含 '.'。
 - help 里标注 "has been removed" / "DEPRECATED" 的条目是废弃占位, 不能补进面板。
+- 短名正则必须允许内部 '-'(b11870 实测: --kv-unified 的负向短名写作 "-no-kvu",
+  旧的 \\w* 会截断成 "-no"), 但要用负向 lookbehind 挡住 "--xxx" 的后半截。
 - winget 输出为 UTF-8。若用 text=True 而不指定 encoding, 在 cp936 环境下读取线程
   会抛 UnicodeDecodeError, stdout 直接变成 None——结果是"更新失败"却看不到任何原因。
 - 不指定 --source 时 winget 会去搜 msstore 源, 该源有证书锁定校验, 被网络中间层
@@ -62,7 +64,9 @@ _AUTO_GROUP_LABEL = "新增功能"
 
 # --help 里每条参数定义以 '-' 起头, 续行(说明/默认值/环境变量)以空白起头
 _HELP_FLAG_RE = re.compile(r"--[a-z0-9][-a-z0-9._]*")      # 含 '.' 才不会把 --fim-qwen-1.5b-default 截断
-_HELP_SHORT_RE = re.compile(r"(?<![\w.-])-[A-Za-z]\w*")     # 单横线短名, 不误吃 --xxx 内部
+# 短名允许内部含 '-'(如 --kv-unified 的负向短名写作 "-no-kvu"); 负向 lookbehind 防止
+# 把 "--help" 的后半截 "-help" 当成短名
+_HELP_SHORT_RE = re.compile(r"(?<![\w.-])-[A-Za-z][\w-]*")  # 单横线短名, 不误吃 --xxx 内部
 _HELP_GAP_RE = re.compile(r"\s{8,}")                        # 参数列与说明列之间的对齐空白
 _HELP_DEFAULT_RE = re.compile(r"\(default:\s*([^)]*)\)")
 _HELP_INT_RE = re.compile(r"-?\d+")

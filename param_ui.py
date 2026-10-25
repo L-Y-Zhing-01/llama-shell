@@ -82,7 +82,7 @@ class ParamRow(tk.Frame):
         self.grid_columnconfigure(1, weight=1)
 
         # 参数名与 --help 保持一致, 不翻译; 中文含义走悬停提示。
-        # 只有 extra_args 没有对应的 flag(它是自由格式的附加参数), 退化为显示中文名。
+        # 回退链仅在定义缺失 cli_flag 时兜底(当前参数表内不存在这种条目)。
         # 这里刻意不用 tk.Label 的 width: 它的单位是"字符数", 会按字体的平均字宽放大
         # ——29 字符的 flag 会被算成 205px, 实际只需 168px, 白白挤掉输入框。
         self.label = tk.Label(
