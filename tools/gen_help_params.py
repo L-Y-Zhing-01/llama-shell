@@ -5,8 +5,9 @@
     python tools/gen_help_params.py
 
 在 help/index.html 的 <!-- PARAMS:BEGIN --> 与 <!-- PARAMS:END --> 标记之间
-生成静态参数卡片（按分组，含 flag/别名/类型/默认值/可选值/中文含义），
-可重复运行，幂等替换。参数表更新后重跑一次即可刷新站点内容。
+生成静态参数卡片（按分组，含 flag/别名/类型/默认值/可选值/中文含义，以及
+llama_params.PARAM_PLAIN 里的一句话「白话解说」），可重复运行，幂等替换。
+参数表或白话解说更新后重跑一次即可刷新站点内容；缺白话解的参数会逐条告警。
 """
 
 import html
@@ -17,7 +18,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent          # llama-shell/tools
 PROJ_DIR = SCRIPT_DIR.parent                          # llama-shell
 sys.path.insert(0, str(PROJ_DIR))
 
-from llama_params import PARAM_DEFINITIONS, PARAM_GROUP_LABELS  # noqa: E402
+from llama_params import PARAM_DEFINITIONS, PARAM_GROUP_LABELS, PARAM_PLAIN  # noqa: E402
 
 HELP_PATH = PROJ_DIR / "help" / "index.html"
 BEGIN = "<!-- PARAMS:BEGIN -->"
@@ -73,11 +74,15 @@ def render_param(p) -> str:
         meta.append(f'<span class="badge choice">可选值: {html.escape(vals)}</span>')
 
     desc = f'<div class="pdesc">{html.escape(p.help_text)}</div>' if p.help_text else ""
+    plain = PARAM_PLAIN.get(p.key, "").strip()
+    plain_html = (f'<div class="pplain"><b>白话解说</b>{html.escape(plain)}</div>'
+                  if plain else "")
     return (
         '<div class="pcard">\n'
         f'  <div class="pflag">{flag_html}{alias_html}{label_html}</div>\n'
         f'  <div class="pmeta">{"".join(meta)}</div>\n'
         f'  {desc}\n'
+        f'  {plain_html}\n'
         '</div>'
     )
 
@@ -116,6 +121,10 @@ def main() -> None:
     i, j = text.find(BEGIN), text.find(END)
     if i < 0 or j < 0 or j < i:
         raise SystemExit(f"错误: {HELP_PATH} 中找不到 {BEGIN}...{END} 标记")
+    missing = [p.cli_flag for p in PARAM_DEFINITIONS if not PARAM_PLAIN.get(p.key, "").strip()]
+    if missing:
+        print(f"警告: {len(missing)} 个参数缺「白话解说」(PARAM_PLAIN)，卡片将不含该段：\n  "
+              + ", ".join(missing), file=sys.stderr)
     new_text = text[: i + len(BEGIN)] + "\n" + render_section() + "\n" + text[j:]
     HELP_PATH.write_text(new_text, encoding="utf-8")
     print(f"OK: 已写入 {HELP_PATH}（共 {len(PARAM_DEFINITIONS)} 个参数）")
