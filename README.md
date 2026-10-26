@@ -26,8 +26,9 @@ Windows 桌面 GUI，用于管理本地 llama.cpp 模型：浏览 `.gguf` 模型
   未检测到 llama.cpp 时启动即弹窗提醒，附可复制的项目地址。
 - **参数表对账**：每次启动读一次 `llama-server --help`，与内置参数表比对增删，
   新参数自动归入「新增功能」标签页并弹报告，llama.cpp 升级后无需手改界面。
-- **帮助站点**：内置单文件帮助页（使用说明 + 参数精讲 + 常见需求配方），
-  可直接打开，也可部署到任意静态托管后改 `help_url` 指向线上地址。
+- **帮助站点**：内置单文件帮助中心（白话版使用说明 + 参数速查、每张卡片附一句
+  「白话解说」+ 常见需求配方），可直接打开，也可部署到任意静态托管后改
+  `help_url` 指向线上地址。
 - **多显示器适配**：悬停提示按指针所在显示器工作区定位，副屏（含负坐标区）不跑偏。
 
 ## 环境要求
@@ -58,7 +59,7 @@ pythonw main.py
 ```
 main.py            入口 + 界面装配与事件分发
 app_config.py      路径常量与 config.json / models_config.json 读写
-llama_params.py    参数定义表（唯一事实来源）+ 命令行构建
+llama_params.py    参数定义表（唯一事实来源）+ 白话解说 + 命令行构建
 param_ui.py        参数行控件与参数面板
 tooltip.py         通用悬停提示（全进程单例）
 screens.py         Windows 多显示器几何
@@ -68,7 +69,7 @@ updater.py         版本查询、winget 升级、参数表对账
 monitor.py         GPU/RAM 监控线程
 help/index.html    静态帮助站点（单文件，可部署到 EdgeOne Pages 等）
 tools/             开发期脚本，不参与运行时
-                     gen_help_params.py  生成 help 站点的「全参数参考」段落
+                     gen_help_params.py  生成 help 站点的参数速查（含白话解说，缺条告警）
                      debug_winget.py     winget 版本识别逐字段诊断
 ```
 
@@ -77,6 +78,9 @@ tools/             开发期脚本，不参与运行时
 - 参数名与当前版本 `llama-server --help` 保持一致，这是刻意设计（见
   `llama_params.py` 文件头注释）；改参数只改 `PARAM_DEFINITIONS` 一处，
   界面与命令预览随之更新。
+- 帮助站点按「白话版」维护：每张参数卡片的「白话解说」存放在
+  `llama_params.PARAM_PLAIN`（键 = `ParamDef.key`），新增参数时补一条，
+  重新跑 `python tools/gen_help_params.py` 即可刷新站点，缺条目会逐条告警。
 - 所有 winget 调用显式限定 `--source winget`，规避 msstore 源的证书校验失败。
 - 手动 `winget upgrade` 不经过本程序更新流程也不会脱节：重启程序后启动对账
   会自动报告参数表增删。
