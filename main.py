@@ -31,22 +31,38 @@ from app_config import (
 from llama_params import build_argv, build_command_string, find_param_by_flag, get_default_params
 from monitor import MonitorWorker
 from param_ui import ParamsPanel
-from server_process import ServerProcess, wait_until_ready
-from ui_theme import (COMBO_BORDER, COMBO_BTN_BG, COMBO_BTN_HOVER, DISABLED_FG,
-                      ENTRY_BG)
+from server_process import ServerProcess, wait_port_released, wait_until_ready
+import theme as theme_mod
+import tooltip as tooltip_mod
+import ui_theme as ut
 from updater import LlamaUpdater
 
-# 界面配色是按深色设计的(ui_theme 的常量 + 手工 tk 控件); CTk 不设置时默认跟随
-# Windows 系统主题, 系统切到浅色会让 CTk 部分变白、与手工深色控件混杂。
-ctk.set_appearance_mode("dark")
-
-# CTkComboBox 统一样式: 1px 深灰边框 + 深灰箭头按钮(CTk 默认值偏亮, 深色界面上像白框)
-COMBO_KW = dict(
-    border_width=1, border_color=COMBO_BORDER,
-    fg_color=ENTRY_BG, button_color=COMBO_BTN_BG, button_hover_color=COMBO_BTN_HOVER,
-    dropdown_fg_color=ENTRY_BG, dropdown_hover_color=COMBO_BTN_HOVER,
-)
 CUSTOM_CTX_LABEL = "+ 自定义…"   # 上下文预设下拉里的特殊项, 选中后弹出自定义对话框
+
+
+def _combo_kw() -> dict:
+    """CTkComboBox 统一样式: 1px 描边 + 与输入框同族的底色/箭头。
+
+    必须在**建控件时**调用取色(不能做成模块常量): 换肤后要按新主题重建下拉框。
+    """
+    return dict(
+        border_width=1, border_color=ut.COMBO_BORDER,
+        fg_color=ut.ENTRY_BG, button_color=ut.COMBO_BTN_BG,
+        button_hover_color=ut.COMBO_BTN_HOVER,
+        dropdown_fg_color=ut.CARD, dropdown_hover_color=ut.CHIP_BG,
+        text_color=ut.INK,
+    )
+
+
+def _btn_colors(kind: str | None) -> dict:
+    """按钮配色: primary=主操作, danger=危险操作, None=普通按钮(跟随主题默认)。"""
+    if kind == "primary":
+        return {"fg_color": ut.PRIMARY_BG, "hover_color": ut.PRIMARY_ACTIVE_BG,
+                "text_color": ut.PRIMARY_FG}
+    if kind == "danger":
+        return {"fg_color": ut.DANGER_BG, "hover_color": ut.DANGER_ACTIVE_BG,
+                "text_color": ut.DANGER_FG}
+    return {}
 
 
 class App(ctk.CTk):
@@ -61,6 +77,11 @@ class App(ctk.CTk):
 
         # 配置
         self.config = load_config()
+        # 主题: config 里记着上次用的; 未知值由 ui_theme 回落默认
+        self.theme_key = self.config.get("theme", theme_mod.DEFAULT_THEME)
+        ut.apply(self.theme_key)
+        # 窗口本身在 super().__init__ 时已按旧主题建好, 底色要单独改
+        self.configure(fg_color=ut.BG)
         self.models_dir = resolve_path(self.config["models_dir"])
         self.llama_cmd = self.config.get("llama_server_cmd", "llama-server")
         self.monitor_interval = self.config.get("monitor_interval_ms", 1000)
@@ -91,6 +112,8 @@ class App(ctk.CTk):
         # 状态
         self.selected_model: str = ""
         self.model_buttons: dict = {}
+        self._restarting = False    # 重启(卸载→加载)进行中, 期间屏蔽再次触发
+        self._closing = False       # 已确认退出, 防止关闭流程重入
 
         # 构建 UI
         self._build_ui()
@@ -104,6 +127,8 @@ class App(ctk.CTk):
                              f"取消 {len(self.sync_removed_params)}, 见「新增功能」页")
             self._log_param_changes()
             self.after(300, self._show_param_change_report)
+
+        ut.apply_titlebar_theme(self, ut.CURRENT == "dark")
 
         # 未检测到 llama.cpp 时提醒用户
         if not self.llama_available:
@@ -138,26 +163,40 @@ class App(ctk.CTk):
     def _build_topbar(self):
         topbar = ctk.CTkFrame(self, height=44)
         topbar.grid(row=0, column=0, columnspan=2, sticky="ew", padx=4, pady=2)
+        # 按钮区单独占一列(weight=1): 让它吃掉全部剩余宽度, 最右的图标按钮才不会被
+        # 9 个等宽按钮挤出窗口(实测直接同排 grid 时图标会被裁掉半个)。
+        topbar.grid_columnconfigure(0, weight=1)
+        bar = ctk.CTkFrame(topbar, fg_color="transparent")
+        bar.grid(row=0, column=0, sticky="ew")
 
         buttons = [
-            ("加载模型", self.on_load_clicked, "#2e7d32", "#1b5e20"),
-            ("卸载模型", self.on_unload_clicked, "#c62828", "#b71c1c"),
-            ("重启模型", self.on_restart_clicked, None, None),
-            ("保存参数", self.on_save_params, None, None),
-            ("重置参数", self.on_reset_params, None, None),
-            ("打开日志", self.on_open_log, None, None),
-            ("官网", self.on_open_help, "#6a1b9a", "#4a148c"),
-            ("更新", self.on_check_update, "#0277bd", "#01579b"),
-            ("帮助", self.on_open_help_site, "#00695c", "#004d40"),
+            ("加载模型", self.on_load_clicked, "primary"),
+            ("卸载模型", self.on_unload_clicked, "danger"),
+            ("重启模型", self.on_restart_clicked, None),
+            ("保存参数", self.on_save_params, None),
+            ("重置参数", self.on_reset_params, None),
+            ("打开日志", self.on_open_log, None),
+            ("官网", self.on_open_help, None),
+            ("更新", self.on_check_update, None),
+            ("帮助", self.on_open_help_site, None),
         ]
         self.btn_update = None   # 检查/更新期间需要禁用
-        for col, (text, cmd, fg, hover) in enumerate(buttons):
-            topbar.grid_columnconfigure(col, weight=1, uniform="btn")
-            kw = {"fg_color": fg, "hover_color": hover} if fg else {}
-            btn = ctk.CTkButton(topbar, text=text, command=cmd, **kw)
+        for col, (text, cmd, kind) in enumerate(buttons):
+            bar.grid_columnconfigure(col, weight=1, uniform="btn")
+            btn = ctk.CTkButton(bar, text=text, command=cmd, **_btn_colors(kind))
             btn.grid(row=0, column=col, padx=4, pady=4, sticky="ew")
             if text == "更新":
                 self.btn_update = btn
+
+        # 主题开关: 标题栏最右侧只放一个图标(图标=点一下会切到的主题)。
+        # 字号 16 是实测值: ☀/☾ 在 CTk 默认 13 号下笔画糊成一团, 16 号才看得出形。
+        self.btn_theme = ctk.CTkButton(
+            topbar, text=self._theme_button_icon(), width=40,
+            font=(ut.FONT_FAMILY, 16), command=self.on_toggle_theme,
+        )
+        self.btn_theme.grid(row=0, column=1, padx=(2, 4), pady=4, sticky="ns")
+        tooltip_mod.Tooltip(self.btn_theme,
+                            lambda: ("主题", "", self._theme_tooltip(), ""))
 
     def _build_sidebar(self):
         sidebar = ctk.CTkFrame(self, width=380)
@@ -169,10 +208,10 @@ class App(ctk.CTk):
         dir_frame = ctk.CTkFrame(sidebar)
         dir_frame.grid(row=0, column=0, sticky="ew", padx=2, pady=2)
         dir_frame.grid_columnconfigure(0, weight=1)
-        # 边框粗细/颜色见文件顶部 COMBO_KW(默认 2px 浅灰, 即"白框"来源)
+        # 边框粗细/颜色见 _combo_kw(CTk 默认 2px 浅灰, 在深色界面上像"白框")
         self.dir_combo = ctk.CTkComboBox(
             dir_frame, values=self._dir_combo_values(),
-            command=self.on_pick_dir_from_history, **COMBO_KW)
+            command=self.on_pick_dir_from_history, **_combo_kw())
         self.dir_combo.grid(row=0, column=0, padx=5, pady=4, sticky="ew")
         ctk.CTkButton(dir_frame, text="删除", width=44,
                       command=self.on_delete_dir_from_history).grid(
@@ -196,7 +235,7 @@ class App(ctk.CTk):
         preset_labels = self._ctx_preset_labels()
         self.ctx_preset_combo = ctk.CTkComboBox(
             ctx_frame, values=preset_labels, command=self.on_ctx_preset_changed,
-            **COMBO_KW)
+            **_combo_kw())
         self.ctx_preset_combo.grid(row=0, column=1, padx=(2, 5), pady=4, sticky="ew")
 
         ctk.CTkButton(ctx_frame, text="刷新模型列表",
@@ -211,8 +250,8 @@ class App(ctk.CTk):
 
         # (标题, 进度条属性名, 颜色, 标签属性名)
         rows = [
-            ("GPU:", "gpu_bar", "#4caf50", "gpu_label"),
-            ("RAM:", "ram_bar", "#2196f3", "ram_label"),
+            ("GPU:", "gpu_bar", ut.OK, "gpu_label"),
+            ("RAM:", "ram_bar", ut.FIELD_FOCUS, "ram_label"),
         ]
         for row, (title, bar_attr, color, label_attr) in enumerate(rows):
             ctk.CTkLabel(monitor_frame, text=title, width=40, anchor="e").grid(
@@ -259,7 +298,14 @@ class App(ctk.CTk):
         self.extra_entry.bind("<Return>", lambda e: self._on_extra_args_changed())
         self.extra_entry.bind("<FocusOut>", lambda e: self._on_extra_args_changed())
 
-        self.cmd_textbox = ctk.CTkTextbox(cmd_frame, height=60, font=("Consolas", 11))
+        # 命令预览跟主题走(按只读输入框取色): 它是常驻可见的一段命令文本,
+        # 若沿用日志那套"两套主题都深底"的配色, 浅色主题下会留一块黑块。
+        self.cmd_textbox = ctk.CTkTextbox(
+            cmd_frame, height=60, font=("Consolas", 11),
+            fg_color=ut.FIELD_BG, text_color=ut.INK, border_color=ut.FIELD_LINE,
+            scrollbar_button_color=ut.CARD_LINE,
+            scrollbar_button_hover_color=ut.FIELD_FOCUS,
+        )
         self.cmd_textbox.grid(row=2, column=0, sticky="nsew", padx=2, pady=2)
         self.cmd_textbox.insert("1.0", "请选择模型...")
         self.cmd_textbox.configure(state="disabled")
@@ -352,7 +398,7 @@ class App(ctk.CTk):
             hist = self.config.get("models_dir_history", [])
             if not hist:
                 ctk.CTkLabel(body, text="历史记录为空",
-                             text_color=DISABLED_FG).grid(
+                             text_color=ut.FAINT).grid(
                     row=0, column=0, padx=2, pady=6, sticky="w")
                 return
             for i, d in enumerate(hist):
@@ -464,7 +510,7 @@ class App(ctk.CTk):
         """
         if name is None:
             name = self.selected_model
-        normal = ctk.ThemeManager.theme.get("CTkButton", {}).get("fg_color", "#3a3a3a")
+        normal = ut.BTN_BG
         running = self.server.model_name if self.server.is_running() else ""
         # 变化才重绘: (运行中, 选中, 列表长度) 都没变就跳过
         key = (running, name, len(self.model_buttons))
@@ -473,11 +519,14 @@ class App(ctk.CTk):
         self._hl_key = key
         for n, btn in self.model_buttons.items():
             if n == running:
-                btn.configure(fg_color="#2e7d32")
+                btn.configure(fg_color=ut.RUN_BG, text_color=ut.RUN_FG,
+                              hover_color=ut.RUN_ACTIVE_BG)
             elif n == name:
-                btn.configure(fg_color="#1565c0")
+                btn.configure(fg_color=ut.SEL_BG, text_color=ut.SEL_FG,
+                              hover_color=ut.SEL_ACTIVE_BG)
             else:
-                btn.configure(fg_color=normal)
+                btn.configure(fg_color=normal, text_color=ut.BTN_FG,
+                              hover_color=ut.BTN_ACTIVE_BG)
 
     # ────────────── 事件处理 ──────────────
 
@@ -606,6 +655,9 @@ class App(ctk.CTk):
     def on_load_clicked(self):
         if not self.selected_model:
             return
+        if self._restarting:
+            self._set_status("重启进行中 — 请稍候")
+            return
 
         params = self._collect_params()
         argv = build_argv(params, self.llama_cmd)
@@ -642,19 +694,80 @@ class App(ctk.CTk):
             self._set_status(f"进程已退出 (code={self.server.return_code()}) — 请查看日志")
 
     def on_unload_clicked(self):
-        self.server.stop()
-        self._highlight_model_button()   # 卸载后取消运行中亮显
-        self._set_status("已卸载 — 空闲")
+        if self.server.process is None:
+            self._set_status("已卸载 — 空闲")
+            return
+        self._set_status(f"卸载中: {self.server.model_name} ...")
+        self.update_idletasks()             # 先把状态画出来, unload 可能要等几秒
+        if self.server.unload():
+            self._highlight_model_button()  # 卸载后取消运行中亮显
+            self._set_status("已卸载 — 空闲")
+        else:
+            self._set_status("卸载失败 — 进程仍在运行")
+            messagebox.showwarning(
+                "卸载失败",
+                "llama-server 进程无法结束, 仍占着端口与显存。\n"
+                f"PID: {self.server.pid()}\n\n请到任务管理器手动结束, 或查看日志确认原因。")
 
     def on_restart_clicked(self):
+        """重启 = 先卸载(确认进程退出 + 端口释放), 再加载, 不做"边跑边起"。
+
+        旧实现是 stop() 后盲等 500ms 再 start(): 进程若没死透(强杀失败/显存未回收),
+        新实例会和旧实例抢端口与显存, 表现为"重启后加载失败"或显存翻倍。
+        """
         if not self.selected_model:
             return
         if not self.server.is_running():
             self.on_load_clicked()
             return
-        self._set_status("重启中...")
-        self.server.stop()
-        self.after(500, self.on_load_clicked)
+        if self._restarting:
+            self._set_status("重启进行中 — 请稍候")
+            return
+
+        self._restarting = True
+        host, port = self.server.get_host_port()
+        self._set_status(f"重启 ① 卸载中: {self.server.model_name} ...")
+        # 卸载要等进程退出(最长 0.8s 优雅 + 5s 强杀), 放到后台线程, 不冻结界面。
+        # 后台线程不碰 Tk: 只写 state, 由主线程轮询拾取(跨线程调 after 不可靠)。
+        state = {"done": False, "exited": False, "port_ok": False}
+        threading.Thread(target=self._unload_worker,
+                         args=(host, port, state), daemon=True).start()
+        self._poll_unload(state)
+
+    def _unload_worker(self, host: str, port: int, state: dict):
+        """后台线程: 卸载旧进程, 再等端口释放, 只写 state 不碰界面"""
+        exited = self.server.unload()
+        port_ok = wait_port_released(host, port, timeout=10) if exited else False
+        state["exited"], state["port_ok"], state["done"] = exited, port_ok, True
+
+    def _poll_unload(self, state: dict):
+        if self._closing:
+            return                  # 窗口已进入退出流程, 不再推进重启
+        if not state["done"]:
+            self.after(120, lambda: self._poll_unload(state))
+            return
+        self._on_unload_done(state["exited"], state["port_ok"])
+
+    def _on_unload_done(self, exited: bool, port_ok: bool):
+        self._highlight_model_button()      # 卸载后取消"运行中"亮显
+        if not exited:
+            self._restarting = False
+            self._set_status("卸载失败 — 旧进程仍在运行, 已取消重启")
+            messagebox.showwarning(
+                "重启已取消",
+                "旧 llama-server 进程无法结束, 仍占着端口与显存。\n"
+                f"PID: {self.server.pid()}\n\n"
+                "请到任务管理器手动结束后重试, 或查看日志确认原因。")
+            return
+        if port_ok:
+            self._set_status("重启 ② 已卸载, 正在加载 ...")
+        else:
+            self._set_status("已卸载, 但端口仍被占用 — 直接尝试加载(可能失败, 请查看日志)")
+        self.after(300, self._restart_load)
+
+    def _restart_load(self):
+        self._restarting = False
+        self.on_load_clicked()
 
     def on_save_params(self):
         if not self.selected_model:
@@ -877,7 +990,7 @@ class App(ctk.CTk):
         ver = self.installed_version or "当前版本"
         ctk.CTkLabel(
             win, text=f"参数表已更新  —  llama.cpp {ver}",
-            font=("Microsoft YaHei", 16, "bold"), text_color="#4fc3f7",
+            font=("Microsoft YaHei", 16, "bold"), text_color=ut.INK,
         ).pack(pady=(16, 8), padx=22, anchor="w")
 
         box = ctk.CTkTextbox(win, font=("Microsoft YaHei", 12), wrap="word")
@@ -885,8 +998,7 @@ class App(ctk.CTk):
         box.insert("1.0", "\n".join(lines))
         box.configure(state="disabled")
 
-        ctk.CTkButton(win, text="知道了", fg_color="#616161", hover_color="#424242",
-                      command=win.destroy).pack(pady=(0, 16))
+        ctk.CTkButton(win, text="知道了", command=win.destroy).pack(pady=(0, 16))
 
     def _show_llama_missing_dialog(self):
         """未检测到 llama.cpp 时的提醒窗口, 附可复制的开源项目地址"""
@@ -899,7 +1011,7 @@ class App(ctk.CTk):
 
         ctk.CTkLabel(
             win, text="未检测到可用的 llama.cpp",
-            font=("Microsoft YaHei", 17, "bold"), text_color="#e53935",
+            font=("Microsoft YaHei", 17, "bold"), text_color=ut.ERR,
         ).pack(pady=(20, 8), padx=22, anchor="w")
 
         tip = (
@@ -939,8 +1051,73 @@ class App(ctk.CTk):
         btns.pack(fill="x", padx=22, pady=(16, 18))
         ctk.CTkButton(btns, text="打开项目主页",
                       command=lambda: webbrowser.open(LlamaUpdater.REPO_URL)).pack(side="left")
-        ctk.CTkButton(btns, text="关闭", fg_color="#616161", hover_color="#424242",
-                      command=win.destroy).pack(side="right")
+        ctk.CTkButton(btns, text="关闭", command=win.destroy).pack(side="right")
+
+    # ────────────── 主题 ──────────────
+
+    def _theme_button_icon(self) -> str:
+        """图标表示"点一下会切到"的主题: 当前浅色显示月亮(切深色), 深色显示太阳"""
+        return "☾" if ut.CURRENT == "light" else "☀"
+
+    def _theme_tooltip(self) -> str:
+        nxt = theme_mod.THEMES[theme_mod.next_theme_key(ut.CURRENT)]["label"]
+        return f"切换到{nxt}主题"
+
+    def on_toggle_theme(self):
+        self._swap_theme(theme_mod.next_theme_key(ut.CURRENT))
+
+    def _swap_theme(self, key: str):
+        """换肤: 存状态 → 换调色板 → 重建界面 → 回填。
+
+        CTk/tk 控件的颜色是**创建时**取死的, 逐控件 configure 会漏(参数面板 250+
+        个原生控件), 所以按 Mo-Shen 的做法原地重建界面, 再把用户状态填回去。
+        """
+        if key not in theme_mod.THEMES or key == ut.CURRENT:
+            return
+
+        selected = self.selected_model
+        params = self._collect_params() if selected else None
+        raw_status = getattr(self, "_last_status_text", "") or ""
+        status = raw_status[len("状态: "):] if raw_status.startswith("状态: ") else ""
+
+        ut.apply(key)
+        self.theme_key = key
+        tooltip_mod.reset_tip_window()      # 提示窗颜色也是建窗时取的
+        self.config["theme"] = key
+        try:
+            save_config(self.config)
+        except OSError as e:
+            self._set_status(f"主题已切换, 但配置保存失败: {e}")
+
+        # 拆掉旧界面(只留窗口本身), 并清掉所有"变化才重绘"的缓存
+        for child in self.winfo_children():
+            child.destroy()
+        self.model_buttons = {}
+        self._hl_key = None
+        self._last_status_text = None
+        for attr in ("_last_gpu_frac", "_last_ram_frac"):
+            setattr(self, attr, -1.0)      # 进度条缓存: 必须给数值, _set_progress 要做减法
+        for attr in ("_last_gpu_text", "_last_ram_text"):
+            setattr(self, attr, None)
+        self.configure(fg_color=ut.BG)
+
+        self._build_ui()
+        self._refresh_model_list()
+
+        if selected and selected in self.model_buttons:
+            # 回填未保存的编辑(列表刷新可能已经把参数重置成配置里的值)
+            self.selected_model = selected
+            if params is not None:
+                self.params_panel.load_params(params)
+            self.extra_entry.delete(0, "end")
+            self.extra_entry.insert(0, str((params or {}).get("extra_args") or ""))
+            self._refresh_command_preview()
+            self._refresh_ctx_preset(params or {})
+            self._highlight_model_button(selected)
+
+        ut.apply_titlebar_theme(self, ut.CURRENT == "dark")
+        if status:
+            self._set_status(status)
 
     # ────────────── 状态与监控 ──────────────
 
@@ -963,13 +1140,15 @@ class App(ctk.CTk):
 
     def _check_process_state(self):
         """定时检查进程是否已意外退出"""
-        if self.server.process is not None and not self.server.is_running():
-            code = self.server.return_code()
-            if code is not None:
-                self._set_status(f"已停止 (code={code})")
-                self._highlight_model_button()   # 进程意外退出, 取消运行中亮显
-        elif self.server.is_running():
-            self._set_status_running()
+        # 重启的「卸载中→加载中」两段状态由 on_restart_clicked 自己维护, 别被覆盖
+        if not self._restarting:
+            if self.server.process is not None and not self.server.is_running():
+                code = self.server.return_code()
+                if code is not None:
+                    self._set_status(f"已停止 (code={code})")
+                    self._highlight_model_button()   # 进程意外退出, 取消运行中亮显
+            elif self.server.is_running():
+                self._set_status_running()
         self.after(200, self._check_process_state)
 
     def _tick_monitor(self):
@@ -1010,9 +1189,37 @@ class App(ctk.CTk):
     # ────────────── 清理 ──────────────
 
     def on_closing(self):
+        if self._closing:
+            return
+        if self._restarting:
+            if not messagebox.askyesno(
+                    "退出确认",
+                    "模型正在重启(卸载→加载)中, 现在退出会中断重启并卸载模型。\n\n确定退出吗?"):
+                return
+        elif self.server.is_running():
+            mm, ss = divmod(self.server.uptime_seconds(), 60)
+            hh, mm = divmod(mm, 60)
+            if not messagebox.askyesno(
+                    "退出确认",
+                    f"模型仍在运行: {self.server.model_name}\n"
+                    f"已运行 {hh:02d}:{mm:02d}:{ss:02d}\n\n"
+                    "关闭 llama-shell 会卸载该模型(结束 llama-server 进程), "
+                    "正在进行的请求会被中断。\n\n确定关闭吗?"):
+                self._set_status_running()      # 用户取消: 状态栏恢复"运行中"
+                return
+
+        self._closing = True        # 之后后台线程的回调一律丢弃, 不再 update 界面
+        if self.server.process is not None:
+            self._set_status("退出中: 正在卸载模型 ...")
+            self.update_idletasks()
+            if not self.server.unload():
+                messagebox.showwarning(
+                    "未能结束模型进程",
+                    "llama-server 进程仍然存活, 显存未释放。\n"
+                    f"PID: {self.server.pid()}\n\n请到任务管理器手动结束。")
+
         self.monitor.stop()
-        if self.server.is_running():
-            self.server.stop()
+        self.server.stop()      # 未运行时就只做收尾(关日志句柄)
         self.destroy()
 
 

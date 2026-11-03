@@ -10,17 +10,20 @@
   统一设定(见 ParamsPanel), 同页内输入框才能左端对齐。
 """
 
+import os
 import tkinter as tk
-from tkinter import ttk
+from pathlib import Path
+from tkinter import filedialog, ttk
 
 import customtkinter as ctk
 
 from llama_params import PARAM_DEFINITIONS, PARAM_GROUP_LABELS, PARAM_GROUPS, ParamDef
 from tooltip import Tooltip
-from ui_theme import (
-    ACCENT, ENTRY_BG, ENTRY_BORDER, FONT, FONT_FAMILY, SURFACE, TEXT, WHITE,
-    setup_native_style,
-)
+import ui_theme as ut
+from ui_theme import FONT, FONT_FAMILY, setup_native_style
+
+# 注意: 颜色一律走 ut.XXX 属性访问 —— 换肤时模块变量会被重新赋值,
+# from-import 绑死的旧色值不会跟着变(见 ui_theme 模块头注释)。
 
 # 参数名字号比取值小一号: flag 最长 29 字符(--spec-draft-cpu-strict-batch),
 # 10pt 要 183px、9pt 只要 166px, 两列布局下这一号之差很关键。
@@ -75,7 +78,7 @@ class ParamRow(tk.Frame):
     LABEL_PADX = (6, 10)          # 参数名列左右留白, 见 ParamsPanel 里 label_px 的算法
 
     def __init__(self, parent, param: ParamDef, on_change=None):
-        super().__init__(parent, bg=SURFACE)
+        super().__init__(parent, bg=ut.SURFACE)
         self.param = param
         self.on_change = on_change
         # 第 0 列是参数名(其 minsize 由面板按本页最长参数名统一设定), 第 1 列吃掉剩余宽度
@@ -87,7 +90,7 @@ class ParamRow(tk.Frame):
         # ——29 字符的 flag 会被算成 205px, 实际只需 168px, 白白挤掉输入框。
         self.label = tk.Label(
             self, text=param.cli_flag or param.label or param.key,
-            bg=SURFACE, fg=TEXT, anchor="w", bd=0, font=FLAG_FONT,
+            bg=ut.SURFACE, fg=ut.TEXT, anchor="w", bd=0, font=FLAG_FONT,
         )
         self.label.grid(row=0, column=0, padx=self.LABEL_PADX, pady=4, sticky="w")
         # 注意: 悬停提示**不能在这里挂**——子类的输入控件(entry/combo/check)是在
@@ -113,10 +116,10 @@ _ENTRY_WIDTH_CHARS = 10
 def _native_entry(parent) -> tk.Entry:
     """创建与 CTk 深色主题一致的经典 tk 输入框"""
     return tk.Entry(
-        parent, bg=ENTRY_BG, fg=TEXT, insertbackground=TEXT,
-        selectbackground=ACCENT, selectforeground=WHITE,
+        parent, bg=ut.ENTRY_BG, fg=ut.TEXT, insertbackground=ut.TEXT,
+        selectbackground=ut.PRIMARY_BG, selectforeground=ut.PRIMARY_FG,
         relief="flat", highlightthickness=1,
-        highlightbackground=ENTRY_BORDER, highlightcolor=ACCENT,
+        highlightbackground=ut.ENTRY_BORDER, highlightcolor=ut.ACCENT,
         font=FONT, width=_ENTRY_WIDTH_CHARS,
     )
 
@@ -131,8 +134,8 @@ class EntryParamRow(ParamRow):
         super().__init__(parent, param, on_change, **kw)
         self.entry = _native_entry(self)
         self.entry.grid(row=0, column=1, padx=5, pady=4, sticky="ew")
-        self.entry.bind("<FocusOut>", lambda e: self._changed())
-        self.entry.bind("<Return>", lambda e: self._changed())
+        self.entry.bind("<FocusOut>", lambda e=None: self._changed())
+        self.entry.bind("<Return>", lambda e=None: self._changed())
 
     def get_value(self):
         try:
@@ -164,6 +167,117 @@ class StrParamRow(EntryParamRow):
     pass
 
 
+# 路径参数的浏览对话框过滤规则: 先按 key 归到类别, 再取对应的 filetypes。
+# 没登记的 key 一律给「所有文件」, 不给用户添堵。
+_FILETYPES = {
+    "gguf": [("GGUF 模型", "*.gguf"), ("所有文件", "*.*")],
+    "json": [("JSON 文件", "*.json"), ("所有文件", "*.*")],
+    "ini": [("INI 文件", "*.ini"), ("所有文件", "*.*")],
+    "pem": [("证书/私钥", "*.pem;*.crt;*.key"), ("所有文件", "*.*")],
+    "text": [("文本文件", "*.txt;*.gbnf;*.jinja"), ("所有文件", "*.*")],
+}
+_KEY_FILETYPES = {
+    "spec_draft_model": "gguf", "mmproj": "gguf",
+    "lookup_cache_static": "gguf", "lookup_cache_dynamic": "gguf",
+    "json_schema_file": "json", "ui_config_file": "json", "mcp_servers_config": "json",
+    "models_preset": "ini",
+    "ssl_cert_file": "pem", "ssl_key_file": "pem",
+    "api_key_file": "text", "grammar_file": "text", "chat_template_file": "text",
+}
+_ALL_FILETYPES = [("所有文件", "*.*")]
+
+
+def _path_key(path_str: str) -> str:
+    """路径判等用的键: Windows 下大小写与斜杠方向都不敏感"""
+    return os.path.normcase(os.path.normpath(path_str.strip()))
+
+
+class PathParamRow(EntryParamRow):
+    """路径输入行: 文本输入 + 「…」浏览按钮。
+
+    选文件 / 选目录 / 多选追加 由 `ParamDef.browse_mode` 决定:
+    - 'file'  单个文件, 选中后替换；
+    - 'dir'   文件夹, 见 llama_params.PATH_DIR_KEYS；
+    - 'files' 逗号分隔的多值路径(--lora / --control-vector), 多选后追加去重。
+    按钮用 Label 模拟而不是 tk.Button: Windows 上经典 Button 的 bg 被系统主题接管,
+    换肤不生效; Label 的底色完全由我们控制。
+    """
+
+    def __init__(self, parent, param, on_change=None, **kw):
+        super().__init__(parent, param, on_change, **kw)
+        self.entry.grid_configure(padx=(5, 2))
+        self.browse_btn = tk.Label(
+            self, text="…", bg=ut.BTN_BG, fg=ut.BTN_FG, font=FONT,
+            padx=5, bd=0, cursor="hand2",
+            highlightthickness=1, highlightbackground=ut.ENTRY_BORDER,
+        )
+        self.browse_btn.grid(row=0, column=2, padx=(0, 5), pady=4, sticky="ns")
+        self.browse_btn.bind("<Button-1>", lambda e=None: self._browse())
+        self.browse_btn.bind("<Enter>", self._on_hover_in)
+        self.browse_btn.bind("<Leave>", self._on_hover_out)
+
+    def _on_hover_in(self, _e=None):
+        self.browse_btn.configure(bg=ut.BTN_ACTIVE_BG, fg=ut.BTN_ACTIVE_FG)
+
+    def _on_hover_out(self, _e=None):
+        self.browse_btn.configure(bg=ut.BTN_BG, fg=ut.BTN_FG)
+
+    def _browse(self):
+        cur = self.entry.get().strip()
+        mode = self.param.browse_mode or "file"
+        title = f"选择 {self.param.label or self.param.cli_flag}"
+        start = self._start_dir(cur)
+        if mode == "dir":
+            chosen = filedialog.askdirectory(
+                parent=self, title=title, initialdir=start, mustexist=False)
+        else:
+            ftypes = _FILETYPES.get(_KEY_FILETYPES.get(self.param.key, ""), _ALL_FILETYPES)
+            ask = (filedialog.askopenfilenames if mode == "files"
+                   else filedialog.askopenfilename)
+            chosen = ask(parent=self, title=title, initialdir=start, filetypes=ftypes)
+        if not chosen:
+            return
+        self.entry.delete(0, "end")
+        if mode == "files":
+            self.entry.insert(0, self._merge_multi(cur, chosen))
+        else:
+            self.entry.insert(0, str(Path(chosen)))
+        self._changed()
+
+    @staticmethod
+    def _merge_multi(cur: str, picked) -> str:
+        """把新选中的文件并进现有的逗号列表(去重, 不覆盖用户已填的项)
+
+        去重按 normcase+normpath 比较: 用户手打的 `C:/x.gguf` 与对话框返回的
+        `C:\\x.gguf` 是同一个文件, 不规范化就会重复追加。
+        """
+        items = [s.strip() for s in cur.split(",") if s.strip()]
+        seen = {_path_key(s) for s in items}
+        for p in picked:
+            sp = str(Path(p))
+            key = _path_key(sp)
+            if key not in seen:
+                items.append(sp)
+                seen.add(key)
+        return ",".join(items)
+
+    @staticmethod
+    def _start_dir(cur: str) -> str:
+        """对话框起始目录: 当前值所在处优先, 否则用户主目录"""
+        first = cur.split(",")[0].strip() if cur else ""
+        if first:
+            p = Path(first).expanduser()
+            try:
+                if p.is_dir():
+                    return str(p)
+                if p.parent.is_dir():
+                    return str(p.parent)
+            except OSError:
+                pass
+        home = Path.home()
+        return str(home) if home.is_dir() else "C:/"
+
+
 class ChoiceParamRow(ParamRow):
     """下拉选择行(choice); 空字符串在界面上显示为「未设置」"""
 
@@ -179,8 +293,8 @@ class ChoiceParamRow(ParamRow):
             width=_ENTRY_WIDTH_CHARS,
         )
         self.combo.grid(row=0, column=1, padx=5, pady=4, sticky="ew")
-        self.combo.bind("<<ComboboxSelected>>", lambda e: self._changed())
-        self.combo.bind("<Return>", lambda e: self._changed())
+        self.combo.bind("<<ComboboxSelected>>", lambda e=None: self._changed())
+        self.combo.bind("<Return>", lambda e=None: self._changed())
 
     def get_value(self):
         display = self.combo.get()
@@ -204,8 +318,8 @@ class BoolParamRow(ParamRow):
         self.var = tk.BooleanVar(value=False)
         self.check = tk.Checkbutton(
             self, variable=self.var, command=self._changed,
-            bg=SURFACE, fg=TEXT, selectcolor=ENTRY_BG,
-            activebackground=SURFACE, activeforeground=TEXT,
+            bg=ut.SURFACE, fg=ut.INK, selectcolor=ut.CHECK_BG,
+            activebackground=ut.SURFACE, activeforeground=ut.INK,
             highlightthickness=0, bd=0, relief="flat", font=FONT,
         )
         self.check.grid(row=0, column=1, padx=5, pady=4, sticky="w")
@@ -230,7 +344,7 @@ class BoolPairParamRow(ParamRow):
         )
         self.combo.set(self.DEFAULT)
         self.combo.grid(row=0, column=1, padx=5, pady=4, sticky="w")
-        self.combo.bind("<<ComboboxSelected>>", lambda e: self._changed())
+        self.combo.bind("<<ComboboxSelected>>", lambda e=None: self._changed())
 
     def get_value(self):
         v = self.combo.get()
@@ -255,12 +369,18 @@ _ROW_TYPES = {
     "choice": ChoiceParamRow,
     "bool": BoolParamRow,
     "bool_pair": BoolPairParamRow,
+    "path": PathParamRow,
 }
 
 
 def create_param_row(parent, param: ParamDef, on_change=None) -> ParamRow:
-    """按参数类型创建对应的行控件(path/str 及未知类型都按文本输入处理)"""
-    row = _ROW_TYPES.get(param.type, StrParamRow)(parent, param, on_change)
+    """按参数类型创建对应的行控件(str 及未知类型按文本输入处理, 路径类带浏览按钮)"""
+    if param.browse_mode:
+        # --lora / --control-vector 是 str 类型但取值是路径列表, 也走带按钮的行
+        cls = PathParamRow
+    else:
+        cls = _ROW_TYPES.get(param.type, StrParamRow)
+    row = cls(parent, param, on_change)
     # 整行(含输入控件)建好后再挂悬停提示, 见 ParamRow.__init__ 里的说明
     Tooltip(row, lambda p=param: _tooltip_content(p))
     return row
@@ -276,7 +396,19 @@ class ParamsPanel(ctk.CTkFrame):
 
         setup_native_style(self)
 
-        self.tabview = ctk.CTkTabview(self)
+        self.tabview = ctk.CTkTabview(
+            self,
+            fg_color=ut.CARD, border_color=ut.CARD_LINE,
+            # 选中页用"升起的一层"(CARD_LINE)而不是主色块: CTk 的分段按钮
+            # 只有一个 text_color, 选中块若用 primary(深色主题里就是 ink 本身)
+            # 会出现"同色字压同色底"——标签直接看不见。
+            segmented_button_fg_color=ut.BG_SOFT,
+            segmented_button_selected_color=ut.FIELD_LINE,
+            segmented_button_selected_hover_color=ut.CARD_LINE,
+            segmented_button_unselected_color=ut.BG_SOFT,
+            segmented_button_unselected_hover_color=ut.CHIP_BG,
+            text_color=ut.INK,
+        )
         self.tabview.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -285,7 +417,11 @@ class ParamsPanel(ctk.CTkFrame):
             tab = self.tabview.add(label)
             tab.grid_columnconfigure(0, weight=1)
             tab.grid_rowconfigure(0, weight=1)
-            sf = ctk.CTkScrollableFrame(tab)
+            sf = ctk.CTkScrollableFrame(
+                tab, fg_color=ut.CARD,
+                scrollbar_button_color=ut.CARD_LINE,
+                scrollbar_button_hover_color=ut.ENTRY_BORDER,
+            )
             sf.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
             # 两列布局: 左右两列各占一半宽度, 每行先左后右
             sf.grid_columnconfigure(0, weight=1, uniform="paramcol")

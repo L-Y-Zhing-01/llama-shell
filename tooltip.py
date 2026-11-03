@@ -15,14 +15,11 @@
 
 import tkinter as tk
 
+import ui_theme as ut
 from screens import Rect, work_area_at
-from ui_theme import ENTRY_BORDER, FONT_FAMILY
+from ui_theme import FONT_FAMILY
 
-TIP_BG = "#242424"
-TIP_TITLE = "#6FB3E0"      # 参数名: 偏亮蓝, 与强调色同族
-TIP_NAME = "#DCE4EE"       # 中文名
-TIP_BODY = "#AFBAC6"       # 中文说明
-TIP_META = "#8A939E"       # 类型/默认值等脚注
+# 配色全部取自当前主题(ut.TIP_*), 换肤后由 reset_tip_window() 丢弃旧窗口重建
 WRAP = 430                 # 说明文字换行宽度(px)
 DELAY = 420                # 悬停多久后弹出(ms)
 HIDE_GRACE = 90            # 离开后延迟隐藏(ms), 用于吃掉行内控件间的 <Leave>
@@ -90,18 +87,18 @@ class _TipWindow:
         except tk.TclError:
             pass
 
-        outer = tk.Frame(self.top, bg=ENTRY_BORDER, bd=0, highlightthickness=0)  # 1px 描边
+        outer = tk.Frame(self.top, bg=ut.TIP_LINE, bd=0, highlightthickness=0)  # 1px 描边
         outer.pack(fill="both", expand=True)
-        inner = tk.Frame(outer, bg=TIP_BG, bd=0, highlightthickness=0)
+        inner = tk.Frame(outer, bg=ut.TIP_BG, bd=0, highlightthickness=0)
         inner.pack(fill="both", expand=True, padx=1, pady=1)
-        self.box = tk.Frame(inner, bg=TIP_BG)
+        self.box = tk.Frame(inner, bg=ut.TIP_BG)
         self.box.pack(fill="both", expand=True, padx=PAD, pady=PAD)
 
-        kw = {"bg": TIP_BG, "justify": "left", "anchor": "w", "wraplength": WRAP}
-        self.l_title = tk.Label(self.box, fg=TIP_TITLE, font=(FONT_FAMILY, 9, "bold"), **kw)
-        self.l_name = tk.Label(self.box, fg=TIP_NAME, font=(FONT_FAMILY, 10), **kw)
-        self.l_body = tk.Label(self.box, fg=TIP_BODY, font=(FONT_FAMILY, 9), **kw)
-        self.l_meta = tk.Label(self.box, fg=TIP_META, font=(FONT_FAMILY, 8), **kw)
+        kw = {"bg": ut.TIP_BG, "justify": "left", "anchor": "w", "wraplength": WRAP}
+        self.l_title = tk.Label(self.box, fg=ut.TIP_TITLE, font=(FONT_FAMILY, 9, "bold"), **kw)
+        self.l_name = tk.Label(self.box, fg=ut.TIP_NAME, font=(FONT_FAMILY, 10), **kw)
+        self.l_body = tk.Label(self.box, fg=ut.TIP_BODY, font=(FONT_FAMILY, 9), **kw)
+        self.l_meta = tk.Label(self.box, fg=ut.TIP_META, font=(FONT_FAMILY, 8), **kw)
         self._labels = (self.l_title, self.l_name, self.l_body, self.l_meta)
 
     def show(self, title: str, name: str, body: str, meta: str, x: int, y: int) -> None:
@@ -140,6 +137,18 @@ class _TipWindow:
             self.top.withdraw()
         except tk.TclError:
             pass
+
+
+def reset_tip_window() -> None:
+    """换肤时丢弃共享提示窗: 颜色是建窗时取的, 重建才会用上新主题。"""
+    inst = _TipWindow._inst
+    if inst is None:
+        return
+    try:
+        inst.top.destroy()
+    except tk.TclError:
+        pass
+    _TipWindow._inst = None
 
 
 def _descendants(widget) -> list:

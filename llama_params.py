@@ -15,6 +15,17 @@ from pathlib import Path
 
 # ────────────────────────── 参数定义 ──────────────────────────
 
+# 目录型 path 参数: 界面上的「…」浏览按钮开"选择文件夹", 其余 path 参数一律按"选择文件"。
+# 新增 path 参数默认就是选文件, 只有目录才需要登记在这里。
+PATH_DIR_KEYS = frozenset({
+    "path", "slot_save_path", "media_path", "video_ffmpeg_dir",
+    "log_prompts_dir", "models_dir",
+})
+
+# 逗号分隔的**多值路径**参数: 类型是 str 但取值是文件列表, 浏览按钮支持多选后追加。
+PATH_LIST_KEYS = frozenset({"lora", "control_vector"})
+
+
 @dataclass
 class ParamDef:
     """单个 llama-server 参数的定义"""
@@ -31,6 +42,19 @@ class ParamDef:
     help_text: str = ""               # 帮助文字
     alias: str = ""                   # 额外的长别名, 如 "--gpu-layers"
     extra_flags: tuple = ()           # 其余等价写法(含负向别名), 仅用于识别与文档, 不参与命令构建
+
+    @property
+    def browse_mode(self) -> str:
+        """「…」浏览按钮的模式: '' 不需要 / 'file' 选文件 / 'dir' 选目录 / 'files' 多选
+
+        按类型自动判定, 不用逐条手写: path 类型天然需要浏览, 目录由 PATH_DIR_KEYS 区分,
+        逗号分隔的多值路径(--lora / --control-vector)由 PATH_LIST_KEYS 标为多选。
+        """
+        if self.key in PATH_LIST_KEYS:
+            return "files"
+        if self.type != "path":
+            return ""
+        return "dir" if self.key in PATH_DIR_KEYS else "file"
 
 
 # 缓存类型可选值
@@ -320,6 +344,7 @@ PARAM_DEFINITIONS: list[ParamDef] = [
     ParamDef("models_preset", "--models-preset", label="路由预设文件", group="Advanced", type="path", default="", help_text="路由服务器的模型预设 INI 文件"),
     ParamDef("models_max", "--models-max", label="路由最大模型数", group="Advanced", type="int", default=4, help_text="路由服务器同时加载的最大模型数 (0=不限)"),
     ParamDef("models_autoload", "--models-autoload", negation_flag="--no-models-autoload", label="路由自动加载", group="Advanced", type="bool_pair", default=None, help_text="路由服务器是否自动加载模型"),
+    ParamDef("models_memory_margin", "--models-memory-margin", label="路由显存余量", group="Advanced", type="int", default=0, help_text="路由服务器为每块设备保留的空闲显存 MiB, 新模型放不下时按 LRU 卸载旧模型 (0=禁用)"),
     ParamDef("ui_mcp_proxy", "--ui-mcp-proxy", negation_flag="--no-ui-mcp-proxy", label="MCP代理", group="Advanced", type="bool_pair", default=None, extra_flags=("--webui-mcp-proxy", "--no-webui-mcp-proxy"), help_text="启用 MCP CORS 代理(实验性, 勿在不可信环境使用)"),
     ParamDef("tools", "--tools", label="内置工具", group="Advanced", type="str", default="", help_text="启用内置工具, 逗号分隔; all 表示全部 (read_file/write_file/edit_file/file_glob_search/grep_search/exec_shell_command/get_info); 出于安全默认将 CORS 限制为 localhost"),
     ParamDef("tools_runtime", "--tools-runtime", label="工具运行环境", group="Advanced", type="str", default="", help_text="docker:/podman:/ssh: 形式, 默认宿主机"),
@@ -577,6 +602,7 @@ PARAM_PLAIN: dict[str, str] = {
     "models_preset": "用 INI 配置文件定义路由服务器的模型预设。",
     "models_max": "路由模式下最多同时加载几个模型。0 = 不限。",
     "models_autoload": "路由模式下是否自动把模型加载进来。默认随设置。",
+    "models_memory_margin": "路由模式下的“显存预留”：每块显卡留出这么多 MiB 不占用。新模型塞不下时，会先把最久没用的模型踢出去腾地方。0 = 关闭这套机制。",
     "ui_mcp_proxy": "实验功能：让网页界面通过一个代理访问外部工具。有安全风险，非可信环境别开。",
     "tools": "允许模型调用电脑工具（读写文件、搜索、执行命令等）。非常强大，默认只允许本机网页使用。",
     "tools_runtime": "让上面的工具在 Docker 等隔离环境里运行，更安全。",
