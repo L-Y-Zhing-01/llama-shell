@@ -16,6 +16,8 @@ LOG_DIR = SCRIPT_DIR / "logs"
 DEFAULT_MODELS_DIR = ".."
 
 DEFAULT_CONFIG = {
+    # 界面主题: "dark" / "light"(调色板见 theme.py)
+    "theme": "dark",
     "llama_server_cmd": "llama-server",
     "models_dir": DEFAULT_MODELS_DIR,
     "monitor_interval_ms": 1000,
