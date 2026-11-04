@@ -286,6 +286,15 @@ class App(ctk.CTk):
         ctk.CTkLabel(cmd_top, text="命令预览:", anchor="w").grid(row=0, column=0, padx=4, sticky="w")
         ctk.CTkButton(cmd_top, text="复制", width=60,
                       command=self.on_copy_command).grid(row=0, column=1, padx=4)
+        # 本机 IP: 供局域网设备访问, 只读可选可复制(不影响左侧的「复制」按钮 —— 它只复制命令)
+        ctk.CTkLabel(cmd_top, text="本机 IP:", anchor="e").grid(row=0, column=2, padx=(8, 2))
+        self.ip_entry = ctk.CTkEntry(cmd_top, width=130, justify="center",
+                                     state="readonly", fg_color=ut.FIELD_BG,
+                                     text_color=ut.INK, border_color=ut.FIELD_LINE)
+        self.ip_entry.grid(row=0, column=3, padx=(0, 4))
+        self._set_ip_entry()
+        self.ip_entry.bind("<FocusIn>", self._select_ip)
+        self.ip_entry.bind("<Double-Button-1>", self._select_ip)
 
         # 额外参数不是 llama.cpp 参数(无 --flag), 不进参数面板, 放在命令预览旁:
         # 它直接影响命令末尾的拼接, 与预览放一起最直观。
@@ -309,6 +318,37 @@ class App(ctk.CTk):
         self.cmd_textbox.grid(row=2, column=0, sticky="nsew", padx=2, pady=2)
         self.cmd_textbox.insert("1.0", "请选择模型...")
         self.cmd_textbox.configure(state="disabled")
+
+    @staticmethod
+    def _local_ip() -> str:
+        """本机在局域网中的 IP: 借 UDP connect 探测出口地址(不实际发包)。
+
+        失败(无网卡/离线)时退回 127.0.0.1。
+        """
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0] or "127.0.0.1"
+        except OSError:
+            return "127.0.0.1"
+        finally:
+            sock.close()
+
+    def _set_ip_entry(self):
+        self.ip_entry.configure(state="normal")
+        self.ip_entry.delete(0, "end")
+        self.ip_entry.insert(0, self._local_ip())
+        self.ip_entry.configure(state="readonly")
+
+    def _select_ip(self, _e=None):
+        """获得焦点/双击时全选, Ctrl+C 即复制"""
+        try:
+            self.ip_entry.select_range(0, "end")
+            self.ip_entry.icursor("end")
+        except Exception:
+            pass
+        return "break"          # 双击时吃掉默认的"选一个词", 保持全选
 
     # ────────────── 模型目录切换 ──────────────
 
@@ -496,12 +536,25 @@ class App(ctk.CTk):
                                 command=lambda n=name: self.on_select_model(n))
             btn.grid(row=i, column=0, sticky="ew", padx=2, pady=1)
             self.model_buttons[name] = btn
+            # 悬停提示: 该模型参数配置里的 --tags(保存参数后即时生效, 无需重开)
+            tooltip_mod.Tooltip(btn, lambda n=name: self._model_tip(n))
 
         # 自动选中第一个
         if names and not self.selected_model:
             self.on_select_model(names[0])
         else:
             self._highlight_model_button()
+
+    def _model_tip(self, name: str):
+        """模型列表的悬停提示: 只显示该模型参数配置里的 --tags 标签内容。
+
+        每次弹出时实时求值, 参数保存后立即生效; 没设 tags 返回全空 —— 不弹窗。
+        (Tooltip.show 固定解包 4 元组, 只用 body 字段。)
+        """
+        params = self.models_cfg.get("models", {}).get(name, {}).get("params") or {}
+        tags = str(params.get("tags") or "")
+        body = "、".join(t.strip() for t in tags.replace("，", ",").split(",") if t.strip())
+        return ("", "", body, "")
 
     def _highlight_model_button(self, name: str = None):
         """模型列表配色: 运行中=绿色(优先), 选中=蓝色, 其余=主题默认。
@@ -817,6 +870,9 @@ class App(ctk.CTk):
             params = self._collect_params() if self.selected_model else {}
             host = params.get("host") or "127.0.0.1"
             port = params.get("port") or 8080
+        # 0.0.0.0 / :: 是"监听所有网卡", 浏览器打不开; 本机访问一律用 127.0.0.1
+        if host in ("0.0.0.0", "::", ""):
+            host = "127.0.0.1"
         url = f"http://{host}:{port}"
         webbrowser.open(url)
         self._set_status(f"已在浏览器打开 {url}")
@@ -1079,6 +1135,11 @@ class App(ctk.CTk):
         params = self._collect_params() if selected else None
         raw_status = getattr(self, "_last_status_text", "") or ""
         status = raw_status[len("状态: "):] if raw_status.startswith("状态: ") else ""
+
+        # 焦点先挪到主窗口自身: ut.apply() 走 set_appearance_mode 时, CTk 改标题栏颜色
+        # 会记住当前焦点控件并在恢复后 after(1, *.focus); 若焦点停在将被销毁的输入框上,
+        # 重建后该回调会报 bad window path。存成主窗口自身则安全(App 不销毁)。
+        self.focus_set()
 
         ut.apply(key)
         self.theme_key = key

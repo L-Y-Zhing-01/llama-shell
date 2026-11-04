@@ -81,7 +81,7 @@ _ZERO_ONE = ["", "0", "1"]
 PARAM_DEFINITIONS: list[ParamDef] = [
 
     # ═══════════════ Server 组 ═══════════════
-    ParamDef("host", "--host", label="监听地址", group="Server", type="str", default="127.0.0.1", include="always", help_text="IP 地址(逗号分隔多个), 或以 .sock 结尾绑定 UNIX socket; 多个 TCP 地址时 :: 仅绑定 IPv6"),
+    ParamDef("host", "--host", label="监听地址", group="Server", type="choice", default="127.0.0.1", choices=["127.0.0.1", "0.0.0.0"], include="always", help_text="127.0.0.1 = 仅本机可访问; 0.0.0.0 = 监听所有网卡(局域网内其他设备可访问, 本机网页仍用 127.0.0.1 打开)"),
     ParamDef("port", "--port", label="监听端口", group="Server", type="int", default=8080, include="always", help_text="端口号"),
     ParamDef("api_key", "--api-key", label="API Key", group="Server", type="str", default="", help_text="API 认证密钥, 多个用逗号分隔"),
     ParamDef("api_key_file", "--api-key-file", label="API Key文件", group="Server", type="path", default="", help_text="存放 API Key 的文件, 每行一个, # 开头的行视为注释"),

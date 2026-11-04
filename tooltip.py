@@ -225,7 +225,8 @@ class Tooltip:
             content = self.content_fn()
         except Exception:
             return
-        if not content:
+        if not content or not any(content):       # 全空内容 → 没什么可提示
+            self._do_hide()                       # 还要收掉上一个控件留下的旧提示
             return
         _TipWindow.get(self.widget.winfo_toplevel()).show(*content, x, y)
         self._shown = True
@@ -239,3 +240,5 @@ class Tooltip:
     def _on_destroy(self, _e=None) -> None:
         self._cancel("_show_id")
         self._cancel("_hide_id")
+        if self._shown:
+            self._do_hide()       # 控件销毁(如模型列表重建)时收掉已显示的提示
