@@ -1,0 +1,4 @@
+# llama-shell 运行依赖
+# Python 3.10+ ；换到新机器上只需：pip install -r requirements.txt
+# 唯一第三方依赖（界面主题库，自带 30 套配色）。tkinter 随 Python 一起安装。
+ttkbootstrap>=2.0,<3

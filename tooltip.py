@@ -7,7 +7,7 @@
   <Leave> → 隐藏 → 指针回到行上 → 再 <Enter>, 形成"显示/隐藏"抖动。
 - **显示有延迟, 隐藏有宽限**: 划过时不会一路闪提示; 在行内从标签移到输入框会
   先 <Leave> 再 <Enter>, 靠 HIDE_GRACE 的宽限期把这次"离开"吃掉, 避免闪一下。
-- overrideredirect + topmost: 不抢焦点、不打断输入框编辑、始终压在 CTk 窗口之上。
+- overrideredirect + topmost: 不抢焦点、不打断输入框编辑、始终压在主窗之上。
 - **定位以"指针所在显示器的工作区"为界**(见 screens 模块): Tk 的
   winfo_screenwidth/height 只反映主显示器, 且副屏坐标可能是负数, 用主屏尺寸判断
   或把坐标钳到 >=0 都会让提示跑到主屏上(详见 place() 的注释)。
@@ -19,7 +19,8 @@ import ui_theme as ut
 from screens import Rect, work_area_at
 from ui_theme import FONT_FAMILY
 
-# 配色全部取自当前主题(ut.TIP_*), 换肤后由 reset_tip_window() 丢弃旧窗口重建
+# 配色取自当前 ttkbootstrap 主题(建窗时取一次); 换肤后由 reset_tip_window()
+# 丢弃旧窗口, 下次悬停时按新主题重建。
 WRAP = 430                 # 说明文字换行宽度(px)
 DELAY = 420                # 悬停多久后弹出(ms)
 HIDE_GRACE = 90            # 离开后延迟隐藏(ms), 用于吃掉行内控件间的 <Leave>
@@ -87,18 +88,25 @@ class _TipWindow:
         except tk.TclError:
             pass
 
-        outer = tk.Frame(self.top, bg=ut.TIP_LINE, bd=0, highlightthickness=0)  # 1px 描边
+        # 提示窗是纯 tk 控件(不是 ttk), 颜色不会自动跟随主题 —— 每次建窗时
+        # 从当前主题取一次, 换肤则由 reset_tip_window() 丢弃重建。
+        c = ut.colors()
+        tip_line, tip_bg = c.border, c.bg
+        tip_title, tip_name = c.primary, c.fg
+        tip_body, tip_meta = c.secondary, c.secondary
+
+        outer = tk.Frame(self.top, bg=tip_line, bd=0, highlightthickness=0)  # 1px 描边
         outer.pack(fill="both", expand=True)
-        inner = tk.Frame(outer, bg=ut.TIP_BG, bd=0, highlightthickness=0)
+        inner = tk.Frame(outer, bg=tip_bg, bd=0, highlightthickness=0)
         inner.pack(fill="both", expand=True, padx=1, pady=1)
-        self.box = tk.Frame(inner, bg=ut.TIP_BG)
+        self.box = tk.Frame(inner, bg=tip_bg)
         self.box.pack(fill="both", expand=True, padx=PAD, pady=PAD)
 
-        kw = {"bg": ut.TIP_BG, "justify": "left", "anchor": "w", "wraplength": WRAP}
-        self.l_title = tk.Label(self.box, fg=ut.TIP_TITLE, font=(FONT_FAMILY, 9, "bold"), **kw)
-        self.l_name = tk.Label(self.box, fg=ut.TIP_NAME, font=(FONT_FAMILY, 10), **kw)
-        self.l_body = tk.Label(self.box, fg=ut.TIP_BODY, font=(FONT_FAMILY, 9), **kw)
-        self.l_meta = tk.Label(self.box, fg=ut.TIP_META, font=(FONT_FAMILY, 8), **kw)
+        kw = {"bg": tip_bg, "justify": "left", "anchor": "w", "wraplength": WRAP}
+        self.l_title = tk.Label(self.box, fg=tip_title, font=(FONT_FAMILY, 9, "bold"), **kw)
+        self.l_name = tk.Label(self.box, fg=tip_name, font=(FONT_FAMILY, 10), **kw)
+        self.l_body = tk.Label(self.box, fg=tip_body, font=(FONT_FAMILY, 9), **kw)
+        self.l_meta = tk.Label(self.box, fg=tip_meta, font=(FONT_FAMILY, 8), **kw)
         self._labels = (self.l_title, self.l_name, self.l_body, self.l_meta)
 
     def show(self, title: str, name: str, body: str, meta: str, x: int, y: int) -> None:

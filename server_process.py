@@ -12,7 +12,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-CREATE_NO_WINDOW = 0x08000000
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
+from winenv import CREATE_NO_WINDOW
 
 
 class ServerProcess:
@@ -132,16 +137,25 @@ class ServerProcess:
 
     def get_host_port(self) -> tuple:
         """从启动参数中提取 host 和 port"""
-        host, port = "127.0.0.1", 8080
-        for i, a in enumerate(self.argv):
-            if a == "--host" and i + 1 < len(self.argv):
-                host = self.argv[i + 1]
-            elif a == "--port" and i + 1 < len(self.argv):
-                try:
-                    port = int(self.argv[i + 1])
-                except ValueError:
-                    pass
+        host = argv_value(self.argv, "--host", "127.0.0.1")
+        try:
+            port = int(argv_value(self.argv, "--port", 8080))
+        except (TypeError, ValueError):
+            port = 8080
         return host, port
+
+
+def argv_value(argv: list, flag: str, default=None):
+    """取启动参数中 flag 的值; 没有 / 没给值时返回 default"""
+    for i, a in enumerate(argv):
+        if a == flag and i + 1 < len(argv):
+            return argv[i + 1]
+    return default
+
+
+def argv_has(argv: list, flag: str) -> bool:
+    """启动参数里是否存在某个开关型 flag"""
+    return flag in argv
 
 
 def _port_bindable(port: int) -> bool:
@@ -202,3 +216,77 @@ def wait_until_ready(host: str, port: int, timeout: int = 60, callback=None) -> 
     if callback:
         callback(ok)
     return ok
+
+
+# ────────────── 全量清扫: 按进程名枚举并结束 llama-server ──────────────
+# 用途: 关闭程序时不止结束自己 Popen 出来的那几个实例, 还要清掉历史遗留的孤儿
+# (程序崩溃/被任务管理器结束后, llama-server 会继续占端口和显存, 本进程句柄已丢失)。
+# 只按**可执行文件名**匹配, 不按端口/命令行: 避免误杀别的程序。
+
+def find_llama_servers(extra_names: tuple = ()) -> list:
+    """枚举本机所有 llama-server 进程 → [(pid, name)]。
+
+    extra_names 传额外要匹配的可执行文件名(如配置里自定义的 llama_server_cmd),
+    只取 basename, 大小写不敏感, 带不带 .exe 都算。
+    """
+    wanted = {"llama-server", "llama-server.exe"}
+    for n in extra_names:
+        base = Path(str(n)).name.lower()
+        if not base:
+            continue
+        wanted.add(base)
+        if base.endswith(".exe"):
+            wanted.add(base[:-4])
+        else:
+            wanted.add(base + ".exe")
+
+    found, seen = [], set()
+
+    if psutil is not None:
+        for proc in psutil.process_iter(["pid", "name"]):
+            try:
+                name = (proc.info.get("name") or "")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+            if name.lower() in wanted and proc.pid not in seen:
+                seen.add(proc.pid)
+                found.append((proc.pid, name))
+        return found
+
+    # 没有 psutil: 退回 tasklist(CSV 解析, 只认第二列是纯数字的行)
+    for exe in sorted(wanted):
+        try:
+            out = subprocess.run(
+                ["tasklist", "/FI", f"IMAGENAME eq {exe}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, errors="replace", timeout=10,
+                creationflags=CREATE_NO_WINDOW,
+            ).stdout
+        except Exception:
+            continue
+        for line in out.splitlines():
+            cells = [c.strip().strip('"') for c in line.split('","')]
+            if len(cells) >= 2 and cells[1].isdigit() and int(cells[1]) not in seen:
+                seen.add(int(cells[1]))
+                found.append((int(cells[1]), cells[0]))
+    return found
+
+
+def kill_llama_servers(extra_names: tuple = (), timeout: float = 10.0) -> tuple:
+    """结束本机所有 llama-server 进程(含进程树)。返回 (已结束, 失败) 两个 [(pid, name)]。
+
+    用 taskkill /F /T 而不是 psutil.Process.kill(): /T 连同子进程一起收掉,
+    且不受 pip 装没装 psutil 影响(枚举才用 psutil, 缺失时退回 tasklist)。
+    """
+    killed, failed = [], []
+    for pid, name in find_llama_servers(extra_names):
+        try:
+            r = subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True, text=True, errors="replace", timeout=timeout,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            ok = r.returncode == 0
+        except Exception:
+            ok = False
+        (killed if ok else failed).append((pid, name))
+    return killed, failed

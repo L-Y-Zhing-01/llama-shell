@@ -1,258 +1,270 @@
-# -*- coding: utf-8 -*-
-"""界面配色装载 + 原生控件样式 + CTk 全局主题。
+"""主题层 —— 封装 ttkbootstrap 的 Style。
 
-色值唯一来源是 theme.py(深/浅两套, 语义 token 与 Mo-Shen 一致)。本模块只做三件事:
-  1. 把当前主题灌进模块级变量 —— 界面代码只认这些名字, 不写十六进制色值;
-  2. 把同一个调色板写进 customtkinter 的全局主题表(CTk 控件按它取默认色);
-  3. 配置 ttk(clam) 与 Tk option 的下拉列表配色。
+设计原则
+--------
+1. **颜色唯一来源**是当前 ttkbootstrap 主题的 16 个槽位（bg / fg / primary / …）。
+   本模块不持有任何十六进制色值，也不再维护双调色板（旧的 theme.py 已废弃）。
+2. **ttk 控件创建后自动跟随 `theme_use()`**：不登记、不重放、不重建界面。
+   换肤成本只与控件数量线性相关（实测 1360 个控件约 54ms）。
+3. 只有"非 ttk"的两类东西需要在这里手工取色:
+   · Windows 标题栏（DwmSetWindowAttribute）
+   · tooltip 那个独立 Toplevel
+4. 需要跟着主题变的**自定义 style**（状态栏、提示文字、模型列表等）统一写在
+   `_rebuild_styles()`，由 `Style.on_theme_change()` 在每次切换后自动重跑 ——
+   这是 ttkbootstrap 官方钩子，也是 `theme_use()` 会清空显式配色时唯一可靠的
+   补救点（实测：自定义 background 在切换后被重置成新主题的默认值）。
 
-**调用方必须 `import ui_theme as ut` 后用 `ut.INK` 取色, 不能 from-import**:
-换主题时模块变量会被重新赋值, from-import 绑死的是旧字符串, 换肤不会生效。
-
-参数行使用经典 tk 控件而非 CTk 控件: CTk 控件每次尺寸变化都要重绘抗锯齿圆角
-画布, 227 行参数曾导致拖拽缩放窗口单步耗时 ~45ms; 原生控件无此开销。
+对外开放接口
+------------
+    bind(style, key)                 窗口建好后调一次
+    set_theme(name)                  切换
+    CURRENT                          当前主题名（模块变量）
+    color("bg") / colors()           取当前主题色
+    theme_palette(name)              取任意主题的色（不切换，用于预览）
+    all_themes() / THEME_FAMILIES    主题清单
+    apply_titlebar_theme(root, dark) Windows 标题栏跟随深浅
 """
 
+from __future__ import annotations
+
 import ctypes
-import os
-from tkinter import ttk
+import tkinter as tk
+import tkinter.font as tkfont
 
-import customtkinter as ctk
+from ttkbootstrap.style import Style
 
-import theme as palettes
-
+# ------------------------------------------------------------------ 字体
 FONT_FAMILY = "Microsoft YaHei UI"
 FONT_SIZE = 10
 FONT = (FONT_FAMILY, FONT_SIZE)
+MONO_FONT = ("Consolas", FONT_SIZE)      # 状态栏、命令预览
 
-# 当前生效的主题 key
-CURRENT = palettes.DEFAULT_THEME
+# ------------------------------------------------------------------ 主题清单
+DEFAULT_THEME = "bootstrap-dark"
 
-# ────────────────────────── 调色板变量(apply 时重新赋值) ──────────────────────────
-BG = BG_SOFT = CARD = CARD_LINE = DIVIDER = ""
-FIELD_BG = FIELD_LINE = FIELD_FOCUS = ""
-INK = TEXT2 = MUTED = FAINT = ""
-LABEL_FG = CARD_TITLE = CARD_NUM = CHIP_BG = ""
-BTN_BG = BTN_FG = BTN_ACTIVE_BG = BTN_ACTIVE_FG = ""
-PRIMARY_BG = PRIMARY_FG = PRIMARY_ACTIVE_BG = ""
-RUN_BG = RUN_FG = RUN_ACTIVE_BG = ""
-DISABLED_BG = DISABLED_FG = ""
-CHECK_BG = CHECK_BORDER = CHECK_ON_BG = CHECK_ON_FG = ""
-OK = WARN = ERR = ""
-LOG_BG = LOG_FG = LOG_OK = LOG_ERR = LOG_SELECT_BG = ON_ACCENT = ""
-SEL_BG = SEL_FG = SEL_ACTIVE_BG = ""
-DANGER_BG = DANGER_FG = DANGER_ACTIVE_BG = ""
-TIP_BG = TIP_LINE = TIP_TITLE = TIP_NAME = TIP_BODY = TIP_META = ""
+#: (family, 中文名, 一句话描述) —— 顺序即主题选择器里的排列顺序
+THEME_FAMILIES: list[tuple[str, str, str]] = [
+    ("bootstrap",   "Bootstrap",   "经典蓝，对比清晰"),
+    ("nord",        "Nord",        "北欧冷灰，低饱和"),
+    ("catppuccin",  "Catppuccin",  "柔和紫灰，糖果感"),
+    ("dracula",     "Dracula",     "紫夜，暗色高对比"),
+    ("tokyo-night", "Tokyo Night", "深夜蓝紫，不刺眼"),
+    ("one",         "Atom One",    "编辑器中性灰"),
+    ("gruvbox",     "Gruvbox",     "复古暖褐，高辨识"),
+    ("solarized",   "Solarized",   "暖砂配青，护眼"),
+    ("everforest",  "Everforest",  "林间绿，自然柔和"),
+    ("pydata",      "PyData",      "青碧色，偏技术感"),
+    ("vapor",       "Vapor",       "霓虹紫青，赛博"),
+    ("minty",       "Minty",       "薄荷绿，清爽"),
+    ("pulse",       "Pulse",       "脉冲紫，低饱和"),
+    ("united",      "United",      "砖红，稳重"),
+    ("sandstone",   "Sandstone",   "砂岩灰褐"),
+]
 
-# 旧名兼容(界面里仍有一批 SURFACE/ENTRY_* 的叫法, 语义完全对应)
-SURFACE = ENTRY_BG = ENTRY_BORDER = ""
-COMBO_BORDER = COMBO_BTN_BG = COMBO_BTN_HOVER = ""
-TEXT = ACCENT = WHITE = ""
+_MODES = ("light", "dark")
+
+# ------------------------------------------------------------------ 状态
+CURRENT = DEFAULT_THEME
+_STYLE: Style | None = None
 
 
-def apply(key: str) -> dict:
-    """切换主题: 灌模块变量 → 重写 CTk 全局主题表。返回所用调色板。
+# ------------------------------------------------------------------ 主题名工具
+def all_themes() -> list[str]:
+    """全部 30 个主题名，按组内浅/深成对排列。"""
+    return [f"{fam}-{mode}" for fam, _, _ in THEME_FAMILIES for mode in _MODES]
 
-    只改"取色来源", 已经建好的控件不会变色 —— 换肤必须重建界面
-    (见 main.App._swap_theme), 这是 Mo-Shen 方案里定下的规矩。
+
+def family_of(name: str) -> str:
+    return name.rsplit("-", 1)[0] if name else ""
+
+
+def mode_of(name: str) -> str:
+    return "dark" if name.endswith("-dark") else "light"
+
+
+def is_dark(name: str) -> bool:
+    return mode_of(name) == "dark"
+
+
+def family_label(name: str) -> str:
+    fam = family_of(name)
+    for key, label, _ in THEME_FAMILIES:
+        if key == fam:
+            return label
+    return fam
+
+
+def display_name(name: str) -> str:
+    return f"{family_label(name)} · {'深色' if is_dark(name) else '浅色'}"
+
+
+def is_valid(name: str) -> bool:
+    return name in all_themes()
+
+
+# ------------------------------------------------------------------ 绑定与切换
+def bind(style_obj: Style, key: str | None = None) -> None:
+    """绑定 ttkbootstrap 的 Style 单例（窗口建好后调用一次）。
+
+    `on_theme_change` 注册时会立即执行一次回调，因此自定义 style
+    在第一次换肤之前就已经就位。
     """
-    global CURRENT
-    pal = palettes.get_theme(key)
-    CURRENT = pal["key"]
+    global _STYLE, CURRENT
+    _STYLE = style_obj
+    if key:
+        CURRENT = key
+    _setup_fonts(getattr(style_obj, "master", None))
+    style_obj.on_theme_change(_rebuild_styles)
 
-    g = globals()
-    for name, token in _TOKENS.items():
-        g[name] = pal[token]
 
-    _apply_ctk(pal)
+def style() -> Style:
+    if _STYLE is None:
+        raise RuntimeError("ui_theme.bind() 尚未调用")
+    return _STYLE
+
+
+def colors():
+    """当前主题的配色对象（属性式访问：.bg / .fg / .primary …）"""
+    return style().colors
+
+
+def color(key: str) -> str:
+    """按名字取一个颜色槽。可用：bg fg primary secondary success info warning
+    danger light dark selectbg selectfg border inputfg inputbg active"""
+    return getattr(style().colors, key)
+
+
+def theme_palette(name: str):
+    """取**任意**主题的配色对象，不改变当前主题（供预览面板用）。
+
+    优先直接读 Style 的主题定义表；读不到时退化为临时切换再切回
+    （老版本 ttkbootstrap 没有 _theme_definitions，这里留个后路）。
+    """
+    st = style()
+    defs = getattr(st, "_theme_definitions", None)
+    if isinstance(defs, dict) and name in defs:
+        return defs[name].colors
+    cur = st.theme_use()
     try:
-        ctk.set_appearance_mode("dark" if CURRENT == "dark" else "light")
-    except Exception:
-        pass
+        st.theme_use(name)
+        pal = st.colors
+    finally:
+        st.theme_use(cur)
     return pal
 
 
-# token → 模块变量名(子集足够, 其余按需)
-_TOKENS = {
-    "BG": "bg",
-    "BG_SOFT": "bg_soft",
-    "CARD": "card",
-    "CARD_LINE": "card_line",
-    "DIVIDER": "divider",
-    "FIELD_BG": "field_bg",
-    "FIELD_LINE": "field_line",
-    "FIELD_FOCUS": "field_focus",
-    "INK": "ink",
-    "TEXT2": "text2",
-    "MUTED": "muted",
-    "FAINT": "faint",
-    "LABEL_FG": "label_fg",
-    "CARD_TITLE": "card_title",
-    "CARD_NUM": "card_num",
-    "CHIP_BG": "chip_bg",
-    "BTN_BG": "btn_bg",
-    "BTN_FG": "btn_fg",
-    "BTN_ACTIVE_BG": "btn_active_bg",
-    "BTN_ACTIVE_FG": "btn_active_fg",
-    "PRIMARY_BG": "primary_bg",
-    "PRIMARY_FG": "primary_fg",
-    "PRIMARY_ACTIVE_BG": "primary_active_bg",
-    "RUN_BG": "run_bg",
-    "RUN_FG": "run_fg",
-    "RUN_ACTIVE_BG": "run_active_bg",
-    "DISABLED_BG": "disabled_bg",
-    "DISABLED_FG": "disabled_fg",
-    "CHECK_BG": "check_bg",
-    "CHECK_BORDER": "check_border",
-    "CHECK_ON_BG": "check_on_bg",
-    "CHECK_ON_FG": "check_on_fg",
-    "OK": "ok",
-    "WARN": "warn",
-    "ERR": "err",
-    "LOG_BG": "log_bg",
-    "LOG_FG": "log_fg",
-    "LOG_OK": "log_ok",
-    "LOG_ERR": "log_err",
-    "LOG_SELECT_BG": "log_select_bg",
-    "ON_ACCENT": "on_accent",
-    "SEL_BG": "sel_bg",
-    "SEL_FG": "sel_fg",
-    "SEL_ACTIVE_BG": "sel_active_bg",
-    "DANGER_BG": "danger_bg",
-    "DANGER_FG": "danger_fg",
-    "DANGER_ACTIVE_BG": "danger_active_bg",
-    "TIP_BG": "tip_bg",
-    "TIP_LINE": "tip_line",
-    "TIP_TITLE": "tip_title",
-    "TIP_NAME": "tip_name",
-    "TIP_BODY": "tip_body",
-    "TIP_META": "tip_meta",
-    # 旧名
-    "SURFACE": "card",
-    "ENTRY_BG": "field_bg",
-    "ENTRY_BORDER": "field_line",
-    "COMBO_BORDER": "field_line",
-    "COMBO_BTN_BG": "btn_bg",
-    "COMBO_BTN_HOVER": "btn_active_bg",
-    "TEXT": "ink",
-    "ACCENT": "field_focus",
-    "WHITE": "on_accent",
+def set_theme(name: str) -> str:
+    """切换主题。名字非法时回落默认值，返回实际生效的主题名。"""
+    global CURRENT
+    if not is_valid(name):
+        name = DEFAULT_THEME
+    if name == CURRENT:
+        return CURRENT
+    style().theme_use(name)
+    CURRENT = name
+    return CURRENT
+
+
+# ------------------------------------------------------------------ 自定义样式
+#: 次要说明文字
+S_HINT = "Hint.TLabel"
+#: 状态栏（等宽）
+S_STATUS = "Status.TLabel"
+
+#: 模型列表按钮的三种状态样式。
+#: ttk 的按钮**不支持** anchor 构造参数（那是 CTk 的写法，直接传会 TclError），
+#: 只能经样式表设置；而 ttkbootstrap 的 primary/success/secondary-outline 是公用的，
+#: 改它们会波及全程序所有按钮，所以这里克隆一份改名，只把 anchor 换成左对齐。
+S_MODEL_IDLE = "ModelIdle.TButton"
+S_MODEL_SEL = "ModelSel.TButton"
+S_MODEL_RUN = "ModelRun.TButton"
+
+_MODEL_STYLE_SRC = {
+    S_MODEL_IDLE: "secondary.Outline.TButton",
+    S_MODEL_SEL: "primary.TButton",
+    S_MODEL_RUN: "success.TButton",
+}
+
+#: 全局紧凑 padding —— 控件的「文字 ↔ 上下边框」留白。
+#:
+#: 只写**基类样式名**：ttk 的样式选项按名字继承（primary.TButton → TButton），
+#: 所以这一张表就能覆盖全部 bootstyle 变体（按钮 31→25px, 输入框 31→25px），
+#: 1300 多个控件一个都不用改。标签页内的控件是同一批类，自动跟着变。
+#:
+#: 为什么不做成"逐个控件 padY"：ttk 控件没有内部留白的实例属性，
+#: 想按控件调只能给每个控件配独立 style，必然写成屎山。
+#:
+#: 注意：
+#: · 该表必须由 _rebuild_styles 重放 —— theme_use() 会把 padding 还原成主题默认值；
+#: · TCombobox 的 padding 是「左 上 右 下」四值，右侧留给下拉箭头，别压；
+#: · round-toggle 的高度由指示器图片决定，padding 对它无效（本来也够矮）；
+#: · TLabel 没有 padding，它的高度纯由字体决定，想再矮只能改 FONT_SIZE。
+COMPACT_PADDING = {
+    "TButton": (8, 1),
+    "TEntry": (6, 2),
+    "TCombobox": (5, 2, 7, 2),
+    "TNotebook.Tab": (6, 2),
+    "TRadiobutton": (0, 0),
+    "TCheckbutton": (0, 0),
+    "TLabelframe": (6, 4),
 }
 
 
-def _apply_ctk(pal: dict) -> None:
-    """把调色板写进 customtkinter 的全局主题表。
+def _rebuild_styles(st: Style) -> None:
+    """重建随主题变化的自定义 style。
 
-    CTk 控件在 **创建时** 从 ThemeManager.theme 取默认色, 所以这里改完只影响
-    之后新建的控件 —— 正好配合"换肤即重建"的做法, 不必逐个控件 configure。
-    只覆盖用得到的段落, 其余保持 CTk 原样。
+    必须在每次 theme_use 之后重跑：实测显式配置的 background 会被新主题覆盖，
+    on_theme_change 是官方提供的、在样式表重建后执行的钩子。
     """
-    t = ctk.ThemeManager.theme
-
-    def put(section: str, **kw) -> None:
-        node = t.get(section)
-        if isinstance(node, dict):
-            for k, v in kw.items():
-                if k in node:
-                    node[k] = v
-
-    put("CTk", fg_color=pal["bg"])
-    put("CTkFrame", fg_color=pal["card"], top_fg_color=pal["bg_soft"],
-        border_color=pal["card_line"])
-    put("CTkToplevel", fg_color=pal["bg"])
-    put("CTkLabel", text_color=pal["ink"])
-    put("CTkButton", fg_color=pal["btn_bg"], hover_color=pal["btn_active_bg"],
-        text_color=pal["btn_fg"], text_color_disabled=pal["faint"],
-        border_color=pal["card_line"])
-    put("CTkEntry", fg_color=pal["field_bg"], border_color=pal["field_line"],
-        text_color=pal["ink"], placeholder_text_color=pal["faint"])
-    put("CTkComboBox", fg_color=pal["field_bg"], border_color=pal["field_line"],
-        button_color=pal["btn_bg"], button_hover_color=pal["btn_active_bg"],
-        text_color=pal["ink"])
-    put("DropdownMenu", fg_color=pal["card"], hover_color=pal["chip_bg"],
-        text_color=pal["ink"])
-    put("CTkCheckBox", fg_color=pal["check_on_bg"], hover_color=pal["check_on_bg"],
-        border_color=pal["check_border"], checkmark_color=pal["check_on_fg"],
-        text_color=pal["ink"], text_color_disabled=pal["faint"])
-    put("CTkSwitch", progress_color=pal["primary_bg"], button_color=pal["card"],
-        button_hover_color=pal["card"], text_color=pal["ink"],
-        fg_color=pal["chip_bg"])
-    put("CTkProgressBar", fg_color=pal["chip_bg"], progress_color=pal["ok"],
-        border_color=pal["chip_bg"])
-    put("CTkScrollbar", button_color=pal["card_line"],
-        button_hover_color=pal["field_line"], fg_color="transparent")
-    put("CTkTextbox", fg_color=pal["field_bg"], border_color=pal["card_line"],
-        text_color=pal["ink"], scrollbar_button_color=pal["card_line"],
-        scrollbar_button_hover_color=pal["field_line"])
-    put("CTkSegmentedButton", fg_color=pal["chip_bg"],
-        selected_color=pal["primary_bg"], selected_hover_color=pal["primary_active_bg"],
-        unselected_color=pal["chip_bg"], unselected_hover_color=pal["btn_active_bg"],
-        text_color=pal["ink"], text_color_disabled=pal["faint"])
-    put("CTkScrollableFrame", label_fg_color=pal["chip_bg"],
-        label_text_color=pal["muted"])
+    c = st.colors
+    # 先压全局 padding，后面克隆模型按钮样式时会连紧凑值一起继承过去
+    for name, pad in COMPACT_PADDING.items():
+        st.configure(name, padding=pad)
+    st.configure(S_HINT, font=FONT, foreground=c.secondary)
+    st.configure(S_STATUS, font=MONO_FONT, foreground=c.fg)
+    for dst, src in _MODEL_STYLE_SRC.items():
+        _clone_button_style(st, src, dst, anchor="w", font=FONT)
 
 
-_root_for_options = None
+def _clone_button_style(st: Style, src: str, dst: str, **extra) -> None:
+    """把 src 按钮样式的配色（含状态映射）复制成一个新名字，再覆盖少量选项。
 
-
-def setup_native_style(root_widget=None) -> None:
-    """配置 ttk 下拉框与 Tk 下拉列表配色(每次建面板都会重设, 换肤后自动跟随)。
-
-    ttk 必须用 clam 引擎: Windows 的 vista 引擎改不了 Combobox 底色。
+    ttkbootstrap 在每次换主题时按 bootstyle 重算配色，自定义样式名不会自动跟着变，
+    所以这个函数必须在 on_theme_change 回调里重跑（见 _rebuild_styles）。
     """
-    global _root_for_options
-    if root_widget is not None:
-        _root_for_options = root_widget
+    cfg = dict(st.configure(src) or {})
+    cfg.pop("style", None)
+    st.configure(dst, **cfg)
+    mp = st.map(src) or {}
+    if mp:
+        st.map(dst, **mp)
+    if extra:
+        st.configure(dst, **extra)
 
-    style = ttk.Style()
-    try:
-        style.theme_use("clam")
-    except Exception:
-        pass
 
-    style.configure(
-        "Param.TCombobox", fieldbackground=ENTRY_BG, background=ENTRY_BORDER,
-        foreground=TEXT, arrowcolor=MUTED, bordercolor=ENTRY_BORDER,
-        lightcolor=ENTRY_BG, darkcolor=ENTRY_BG, arrowsize=14, font=FONT,
-    )
-    style.map(
-        "Param.TCombobox",
-        fieldbackground=[("readonly", ENTRY_BG), ("focus", ENTRY_BG)],
-        foreground=[("disabled", FAINT)],
-        arrowcolor=[("disabled", FAINT)],
-        bordercolor=[("focus", ACCENT)],
-        lightcolor=[("focus", ACCENT)],
-        darkcolor=[("focus", ACCENT)],
-    )
-
-    if _root_for_options is None:
+def _setup_fonts(root) -> None:
+    """把 Tk 的具名字体换成中文字体，避免 ttk 默认 Segoe UI 下中文发虚。"""
+    if root is None:
         return
-    # 展开后的列表是独立的 Tk 窗口, 只能靠 option 数据库改色
-    for opt, val in (
-        ("*TCombobox*Listbox.background", ENTRY_BG),
-        ("*TCombobox*Listbox.foreground", TEXT),
-        ("*TCombobox*Listbox.selectBackground", PRIMARY_BG),
-        ("*TCombobox*Listbox.selectForeground", PRIMARY_FG),
-    ):
-        _root_for_options.option_add(opt, val)
+    for name in ("TkDefaultFont", "TkTextFont", "TkMenuFont", "TkHeadingFont"):
+        try:
+            tkfont.nametofont(name, root=root).configure(
+                family=FONT_FAMILY, size=FONT_SIZE)
+        except Exception:
+            pass
 
 
-def apply_titlebar_theme(root, dark: bool) -> None:
-    """让系统标题栏跟随深浅主题(Win10 1809+ / Win11 生效, 旧系统静默忽略)。"""
-    if os.name != "nt":
-        return
+# ------------------------------------------------------------------ Windows 标题栏
+def apply_titlebar_theme(root: tk.Misc, dark: bool) -> None:
+    """让系统标题栏跟随深浅色（Win10 1809+ 用 attr 20，更旧的用 19）。"""
     try:
+        root.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
-        if not hwnd:
-            return
         value = ctypes.c_int(1 if dark else 0)
-        for attr in (20, 19):   # DWMWA_USE_IMMERSIVE_DARK_MODE(19 为旧版取值)
+        for attr in (20, 19):
             if ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                    ctypes.c_void_p(hwnd), attr, ctypes.byref(value), 4) == 0:
-                return
+                hwnd, attr, ctypes.byref(value), ctypes.sizeof(value)
+            ) == 0:
+                break
     except Exception:
-        pass
-
-
-# 导入即生效: 界面模块可能在 apply 之前就取色
-apply(CURRENT)
+        pass          # 非 Windows 或系统太旧：静默跳过

@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """参数界面: 参数行控件与参数面板。
 
-设计要点(均为实测结论, 改动前请先复测):
-- 参数行统一用经典 tk 控件, 不用 CTk/ttk——同布局下 30 行参数行的窗口缩放重绘
-  成本  CTk 65ms > ttk 30ms > 经典 tk 20ms。
-- 每行两列(标签 + 输入控件), 面板按 group 分标签页, 每页两列排布。
+全部使用 ttkbootstrap 控件(底层是 ttk), 因此**换肤不需要任何登记或重放**:
+`style.theme_use()` 一改, 所有控件自动跟着重绘(实测 1360 个控件 ~54ms)。
+
+布局要点(实测结论, 改动前请先复测):
+- 每行两列(参数名 + 输入控件), 面板按 group 分标签页, 每页两列排布。
 - **参数名按 `llama-server --help` 原样显示**(如 `--cache-ram`), 不做中文翻译;
   中文含义与详细说明由悬停提示(tooltip.py)给出。因此标签宽度按"本页最长 flag"
   统一设定(见 ParamsPanel), 同页内输入框才能左端对齐。
@@ -13,21 +14,17 @@
 import os
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, ttk
+from tkinter import filedialog
 
-import customtkinter as ctk
+import ttkbootstrap as tb
 
 from llama_params import PARAM_DEFINITIONS, PARAM_GROUP_LABELS, PARAM_GROUPS, ParamDef
 from tooltip import Tooltip
 import ui_theme as ut
-from ui_theme import FONT, FONT_FAMILY, setup_native_style
-
-# 注意: 颜色一律走 ut.XXX 属性访问 —— 换肤时模块变量会被重新赋值,
-# from-import 绑死的旧色值不会跟着变(见 ui_theme 模块头注释)。
 
 # 参数名字号比取值小一号: flag 最长 29 字符(--spec-draft-cpu-strict-batch),
 # 10pt 要 183px、9pt 只要 166px, 两列布局下这一号之差很关键。
-FLAG_FONT = (FONT_FAMILY, 9)
+FLAG_FONT = (ut.FONT_FAMILY, 9)
 
 # 取值控件的类型 → 悬停提示里的中文说明
 _TYPE_CN = {
@@ -72,13 +69,16 @@ def _tooltip_content(param: ParamDef) -> tuple[str, str, str, str]:
     return title, name, body, meta
 
 
-class ParamRow(tk.Frame):
+class ParamRow(tb.Frame):
     """参数行基类: Label(参数名) + 输入控件"""
 
     LABEL_PADX = (6, 10)          # 参数名列左右留白, 见 ParamsPanel 里 label_px 的算法
+    #: 行内上下留白。控件自身的"文字↔边框"间距由 ui_theme.COMPACT_PADDING 统一压,
+    #: 这里只管行与行之间；要整体缩放参数表密度，改这一个数即可。
+    ROW_PADY = 2
 
     def __init__(self, parent, param: ParamDef, on_change=None):
-        super().__init__(parent, bg=ut.SURFACE)
+        super().__init__(parent, padding=0)
         self.param = param
         self.on_change = on_change
         # 第 0 列是参数名(其 minsize 由面板按本页最长参数名统一设定), 第 1 列吃掉剩余宽度
@@ -86,13 +86,11 @@ class ParamRow(tk.Frame):
 
         # 参数名与 --help 保持一致, 不翻译; 中文含义走悬停提示。
         # 回退链仅在定义缺失 cli_flag 时兜底(当前参数表内不存在这种条目)。
-        # 这里刻意不用 tk.Label 的 width: 它的单位是"字符数", 会按字体的平均字宽放大
+        # 不用 Label 的 width: 它的单位是"字符数", 会按字体的平均字宽放大
         # ——29 字符的 flag 会被算成 205px, 实际只需 168px, 白白挤掉输入框。
-        self.label = tk.Label(
-            self, text=param.cli_flag or param.label or param.key,
-            bg=ut.SURFACE, fg=ut.TEXT, anchor="w", bd=0, font=FLAG_FONT,
-        )
-        self.label.grid(row=0, column=0, padx=self.LABEL_PADX, pady=4, sticky="w")
+        self.label = tb.Label(self, text=param.cli_flag or param.label or param.key,
+                              anchor="w", font=FLAG_FONT)
+        self.label.grid(row=0, column=0, padx=self.LABEL_PADX, pady=self.ROW_PADY, sticky="w")
         # 注意: 悬停提示**不能在这里挂**——子类的输入控件(entry/combo/check)是在
         # super().__init__() 之后才创建的, 在这里挂只能覆盖到行框架与参数名标签,
         # 鼠标移到输入框上就不会弹提示。统一由 create_param_row 在整行建好后挂。
@@ -109,19 +107,9 @@ class ParamRow(tk.Frame):
 
 
 # 参数名与输入框的默认请求宽度只求"够放", 真正的宽度由网格分配:
-# tk.Entry/ttk.Combobox 不显式指定 width 时请求 20 字符(~166px), 两列布局下
+# Entry/Combobox 不显式指定 width 时请求 20 字符(~166px), 两列布局下
 # 这个请求宽度会把内容撑出滚动区, 逼出横向滚动条。
 _ENTRY_WIDTH_CHARS = 10
-
-def _native_entry(parent) -> tk.Entry:
-    """创建与 CTk 深色主题一致的经典 tk 输入框"""
-    return tk.Entry(
-        parent, bg=ut.ENTRY_BG, fg=ut.TEXT, insertbackground=ut.TEXT,
-        selectbackground=ut.PRIMARY_BG, selectforeground=ut.PRIMARY_FG,
-        relief="flat", highlightthickness=1,
-        highlightbackground=ut.ENTRY_BORDER, highlightcolor=ut.ACCENT,
-        font=FONT, width=_ENTRY_WIDTH_CHARS,
-    )
 
 
 class EntryParamRow(ParamRow):
@@ -132,8 +120,8 @@ class EntryParamRow(ParamRow):
 
     def __init__(self, parent, param, on_change=None, **kw):
         super().__init__(parent, param, on_change, **kw)
-        self.entry = _native_entry(self)
-        self.entry.grid(row=0, column=1, padx=5, pady=4, sticky="ew")
+        self.entry = tb.Entry(self, font=ut.FONT, width=_ENTRY_WIDTH_CHARS)
+        self.entry.grid(row=0, column=1, padx=5, pady=self.ROW_PADY, sticky="ew")
         self.entry.bind("<FocusOut>", lambda e=None: self._changed())
         self.entry.bind("<Return>", lambda e=None: self._changed())
 
@@ -199,28 +187,14 @@ class PathParamRow(EntryParamRow):
     - 'file'  单个文件, 选中后替换；
     - 'dir'   文件夹, 见 llama_params.PATH_DIR_KEYS；
     - 'files' 逗号分隔的多值路径(--lora / --control-vector), 多选后追加去重。
-    按钮用 Label 模拟而不是 tk.Button: Windows 上经典 Button 的 bg 被系统主题接管,
-    换肤不生效; Label 的底色完全由我们控制。
     """
 
     def __init__(self, parent, param, on_change=None, **kw):
         super().__init__(parent, param, on_change, **kw)
         self.entry.grid_configure(padx=(5, 2))
-        self.browse_btn = tk.Label(
-            self, text="…", bg=ut.BTN_BG, fg=ut.BTN_FG, font=FONT,
-            padx=5, bd=0, cursor="hand2",
-            highlightthickness=1, highlightbackground=ut.ENTRY_BORDER,
-        )
-        self.browse_btn.grid(row=0, column=2, padx=(0, 5), pady=4, sticky="ns")
-        self.browse_btn.bind("<Button-1>", lambda e=None: self._browse())
-        self.browse_btn.bind("<Enter>", self._on_hover_in)
-        self.browse_btn.bind("<Leave>", self._on_hover_out)
-
-    def _on_hover_in(self, _e=None):
-        self.browse_btn.configure(bg=ut.BTN_ACTIVE_BG, fg=ut.BTN_ACTIVE_FG)
-
-    def _on_hover_out(self, _e=None):
-        self.browse_btn.configure(bg=ut.BTN_BG, fg=ut.BTN_FG)
+        self.browse_btn = tb.Button(self, text="…", width=2, bootstyle="secondary-outline",
+                                    command=self._browse, cursor="hand2")
+        self.browse_btn.grid(row=0, column=2, padx=(0, 5), pady=self.ROW_PADY, sticky="ns")
 
     def _browse(self):
         cur = self.entry.get().strip()
@@ -288,11 +262,9 @@ class ChoiceParamRow(ParamRow):
         self._raw_choices = list(param.choices or [])
         self._display_choices = [c if c != "" else self.UNSET for c in self._raw_choices]
 
-        self.combo = ttk.Combobox(
-            self, values=self._display_choices, style="Param.TCombobox",
-            width=_ENTRY_WIDTH_CHARS,
-        )
-        self.combo.grid(row=0, column=1, padx=5, pady=4, sticky="ew")
+        self.combo = tb.Combobox(self, values=self._display_choices,
+                                 width=_ENTRY_WIDTH_CHARS, font=ut.FONT)
+        self.combo.grid(row=0, column=1, padx=5, pady=self.ROW_PADY, sticky="ew")
         self.combo.bind("<<ComboboxSelected>>", lambda e=None: self._changed())
         self.combo.bind("<Return>", lambda e=None: self._changed())
 
@@ -316,13 +288,10 @@ class BoolParamRow(ParamRow):
     def __init__(self, parent, param, on_change=None, **kw):
         super().__init__(parent, param, on_change, **kw)
         self.var = tk.BooleanVar(value=False)
-        self.check = tk.Checkbutton(
-            self, variable=self.var, command=self._changed,
-            bg=ut.SURFACE, fg=ut.INK, selectcolor=ut.CHECK_BG,
-            activebackground=ut.SURFACE, activeforeground=ut.INK,
-            highlightthickness=0, bd=0, relief="flat", font=FONT,
-        )
-        self.check.grid(row=0, column=1, padx=5, pady=4, sticky="w")
+        # round-toggle 把方框换成拨动开关, 与这套主题更匹配
+        self.check = tb.Checkbutton(self, variable=self.var, command=self._changed,
+                                    bootstyle="round-toggle")
+        self.check.grid(row=0, column=1, padx=5, pady=self.ROW_PADY, sticky="w")
 
     def get_value(self):
         return bool(self.var.get())
@@ -338,12 +307,10 @@ class BoolPairParamRow(ParamRow):
 
     def __init__(self, parent, param, on_change=None, **kw):
         super().__init__(parent, param, on_change, **kw)
-        self.combo = ttk.Combobox(
-            self, values=[self.DEFAULT, self.ON, self.OFF], state="readonly",
-            style="Param.TCombobox", width=6,
-        )
+        self.combo = tb.Combobox(self, values=[self.DEFAULT, self.ON, self.OFF],
+                                 state="readonly", width=6, font=ut.FONT)
         self.combo.set(self.DEFAULT)
-        self.combo.grid(row=0, column=1, padx=5, pady=4, sticky="w")
+        self.combo.grid(row=0, column=1, padx=5, pady=self.ROW_PADY, sticky="w")
         self.combo.bind("<<ComboboxSelected>>", lambda e=None: self._changed())
 
     def get_value(self):
@@ -386,7 +353,7 @@ def create_param_row(parent, param: ParamDef, on_change=None) -> ParamRow:
     return row
 
 
-class ParamsPanel(ctk.CTkFrame):
+class ParamsPanel(tb.Frame):
     """参数面板: 每个分组一个标签页, 页内两列排布参数行"""
 
     def __init__(self, parent, on_change=None, **kw):
@@ -394,35 +361,19 @@ class ParamsPanel(ctk.CTkFrame):
         self.on_change = on_change
         self.rows: dict[str, ParamRow] = {}
 
-        setup_native_style(self)
-
-        self.tabview = ctk.CTkTabview(
-            self,
-            fg_color=ut.CARD, border_color=ut.CARD_LINE,
-            # 选中页用"升起的一层"(CARD_LINE)而不是主色块: CTk 的分段按钮
-            # 只有一个 text_color, 选中块若用 primary(深色主题里就是 ink 本身)
-            # 会出现"同色字压同色底"——标签直接看不见。
-            segmented_button_fg_color=ut.BG_SOFT,
-            segmented_button_selected_color=ut.FIELD_LINE,
-            segmented_button_selected_hover_color=ut.CARD_LINE,
-            segmented_button_unselected_color=ut.BG_SOFT,
-            segmented_button_unselected_hover_color=ut.CHIP_BG,
-            text_color=ut.INK,
-        )
-        self.tabview.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+        self.tabview = tb.Notebook(self, bootstyle="primary")
+        self.tabview.grid(row=0, column=0, sticky="nsew", padx=2, pady=1)
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         for group, label in PARAM_GROUP_LABELS.items():
-            tab = self.tabview.add(label)
+            tab = tb.Frame(self.tabview, padding=0)
+            self.tabview.add(tab, text=label)
             tab.grid_columnconfigure(0, weight=1)
             tab.grid_rowconfigure(0, weight=1)
-            sf = ctk.CTkScrollableFrame(
-                tab, fg_color=ut.CARD,
-                scrollbar_button_color=ut.CARD_LINE,
-                scrollbar_button_hover_color=ut.ENTRY_BORDER,
-            )
-            sf.grid(row=0, column=0, sticky="nsew", padx=2, pady=2)
+
+            sf = tb.ScrolledFrame(tab, auto_hide=True, padding=1)
+            sf.grid(row=0, column=0, sticky="nsew", padx=2, pady=1)
             # 两列布局: 左右两列各占一半宽度, 每行先左后右
             sf.grid_columnconfigure(0, weight=1, uniform="paramcol")
             sf.grid_columnconfigure(1, weight=1, uniform="paramcol")

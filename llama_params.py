@@ -38,7 +38,7 @@ class ParamDef:
     type: str = "str"                 # int/float/str/choice/bool/bool_pair/path
     default: Any = None               # 默认值
     choices: Optional[list] = None    # choice 类型的可选值
-    include: str = "non_default"      # always / non_default / never
+    include: str = "non_default"      # always / non_default
     help_text: str = ""               # 帮助文字
     alias: str = ""                   # 额外的长别名, 如 "--gpu-layers"
     extra_flags: tuple = ()           # 其余等价写法(含负向别名), 仅用于识别与文档, 不参与命令构建
@@ -142,6 +142,7 @@ PARAM_DEFINITIONS: list[ParamDef] = [
     ParamDef("cpu_moe", "--cpu-moe", "-cmoe", label="MoE留在CPU", group="Model", type="bool", default=False, help_text="MoE 权重全部保留在 CPU"),
     ParamDef("n_cpu_moe", "--n-cpu-moe", "-ncmoe", label="MoE层留CPU", group="Model", type="int", default=0, help_text="前 N 层 MoE 权重保留在 CPU"),
     ParamDef("moe_cache_mib", "--moe-cache-mib", label="MoE专家缓存", group="Model", type="int", default=0, help_text="常驻 GPU 缓存的 CPU MoE 专家权重上限 (MiB); 多卡时按 --tensor-split 比例拆分, 0=禁用"),
+    ParamDef("moe_cache_cpu_share", "--moe-cache-cpu-share", label="MoE缓存CPU分担", group="Model", type="float", default=0.0, help_text="专家缓存装满后的未命中部分交给 CPU 计算的比例 (0.0~1.0, 默认 0=全部回传 GPU)"),
     ParamDef("n_cpu_ffn", "--n-cpu-ffn", "-ncffn", label="FFN层留CPU", group="Model", type="int", default=0, help_text="前 N 层稠密 FFN 权重保留在 CPU (仅稠密模型, MoE 专家权重用 --n-cpu-moe)"),
     ParamDef("override_tensor", "--override-tensor", "-ot", label="覆盖张量缓冲", group="Model", type="str", default="", help_text="张量名模式=缓冲类型, 逗号分隔"),
     ParamDef("check_tensors", "--check-tensors", label="校验张量", group="Model", type="bool", default=False, help_text="检查模型张量数据是否含非法值"),
@@ -416,6 +417,7 @@ PARAM_PLAIN: dict[str, str] = {
     "cpu_moe": "让 MoE 模型（混合专家）的大部分权重待在内存里、不上显卡，从而在小显存上也能跑大模型。",
     "n_cpu_moe": "把 MoE 模型前 N 层的专家权重放内存（不上显卡），进一步省显存。",
     "moe_cache_mib": "允许把多少专家权重常驻在显卡缓存里，在速度和显存之间取平衡。0 = 不常驻。",
+    "moe_cache_cpu_share": "缓存装满后，多出来的那部分请求是传回显卡算还是留在 CPU 算。0.3 表示三成留在 CPU，其余回显卡。",
     "n_cpu_ffn": "把普通模型前 N 层的计算层放内存来省显存（只对非 MoE 模型生效）。",
     "override_tensor": "高级微调：手动指定某些层放在哪里。不懂别碰。",
     "check_tensors": "加载时检查模型数据有没有异常/损坏，发现问题会报警。默认关闭。",
@@ -728,7 +730,7 @@ def build_argv(params: dict, server_cmd: str = "llama-server") -> list[str]:
                 params = {**params, "alias": stem}
 
     for p in PARAM_DEFINITIONS:
-        if p.include == "never" or not p.cli_flag:
+        if not p.cli_flag:
             continue
 
         val = params.get(p.key, p.default)

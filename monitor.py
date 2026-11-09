@@ -3,9 +3,10 @@
 
 import subprocess
 import threading
-import time
 from dataclasses import dataclass
 from typing import Optional
+
+from winenv import CREATE_NO_WINDOW
 
 try:
     import psutil
@@ -67,7 +68,7 @@ class MonitorWorker:
                 ],
                 timeout=5,
                 text=True,
-                creationflags=0x08000000,  # CREATE_NO_WINDOW
+                creationflags=CREATE_NO_WINDOW,
             ).strip()
             parts = [p.strip() for p in out.split(",")]
             if len(parts) >= 5:
